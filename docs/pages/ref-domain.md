@@ -20,7 +20,7 @@ new Domain<Tools>({
 ## Example
 
 ```ts
-import { Domain, GraderDefinition, Grades, OutcomeGrade, RETURN_VALUES, ReturnValueEnvironment, fieldF1, processGrade } from "signal-sdk";
+import { Domain, GraderDefinition, Grades, OutcomeGrade, RETURN_VALUES, ReturnValueEnvironment, fieldF1, gradeMechanisms, processGrade } from "signal-sdk";
 
 const JSON_EXTRACTION = new Domain<ReturnValueEnvironment>({
   environment: RETURN_VALUES.environment.with({ name: "json-extraction" }),
@@ -28,9 +28,13 @@ const JSON_EXTRACTION = new Domain<ReturnValueEnvironment>({
   makeEnvironment: (scenario, seed, trace) => new ReturnValueEnvironment(scenario, seed, trace),
   grade: (scenario, transcript, outcome) => {
     const expected = scenario.groundState.value, got = outcome.value;
+    const correct = JSON.stringify(got) === JSON.stringify(expected);
+    const outcomeGrade = new OutcomeGrade({ correct, fieldF1: fieldF1(expected, got), action: got === null ? "none" : "answer", goldAction: "answer",
+      deviation: correct ? null : got === null ? "missing_action" : "wrong_value" });
     return new Grades({
-      outcome: new OutcomeGrade({ correct: JSON.stringify(got) === JSON.stringify(expected), fieldF1: fieldF1(expected, got) }),
-      events: [], process: processGrade(transcript),
+      outcome: outcomeGrade,
+      mechanism: gradeMechanisms(scenario, transcript, outcome, outcomeGrade, { mutatingTools: new Set(["escalate"]), provenanceFields: [] }),
+      process: processGrade(transcript),
       metrics: { keys: got && typeof got === "object" ? Object.keys(got).length : 0 },
     });
   },
@@ -51,7 +55,7 @@ const JSON_EXTRACTION = new Domain<ReturnValueEnvironment>({
 
 ## RETURN_VALUES
 
-The default domain. `ReturnValueEnvironment` exposes `input`, `escalate(reason?)`, `goal`, `recordUsage`, `recordSignal`, `appendMessage`, and `finish(returned)` returning `Outcome({ value: returned, escalated })`. `gradeReturnValue` marks a trial correct when `value` deep-equals `groundState.value`, or when the scenario requires escalation and the function escalated. Its one harm is `unnecessary_escalation`. Controls: `never_escalate`, `always_escalate`.
+The default domain. `ReturnValueEnvironment` exposes `input`, `escalate(reason?)`, `goal`, `recordUsage`, `recordSignal`, `appendMessage`, and `finish(returned)` returning `Outcome({ value: returned, escalated })`. `gradeReturnValue` grades the terminal action (`answer` | `escalate` | `none`) against the ground state's gold action and `acceptedActions`, then deep-equality of the value; deviations are `wrong_action`, `missing_action` or `wrong_value`. Mechanisms come from `gradeMechanisms()` with `escalate` as the only mutating tool. Controls: `never_escalate`, `always_escalate`.
 
 ## Helpers
 

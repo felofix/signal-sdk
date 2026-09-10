@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { performance } from "node:perf_hooks";
 import { type Domain, type Execute, RETURN_VALUES } from "./domain.js";
 import {
-  Function, Measurement, MeasurementConfig, TaskDistribution, Scenario, Trial, ValidationError, type ValidityPeriod,
+  Function, Measurement, MeasurementConfig, NOMINAL_THREAT, TaskDistribution, Scenario, type ThreatSpec, Trial, ValidationError, type ValidityPeriod,
   clone, contentHash, now,
 } from "./models.js";
 import type { Row } from "./statistics/core.js";
@@ -43,10 +43,11 @@ export function trialSeed(masterSeed: number, scenario: Scenario, repetition: nu
 
 /** Bind a hand-built book by the hash of its complete content. */
 export function datasetDistribution(name: string, scenarios: readonly Scenario[], options: {
-  labelRule: string; hazardRates?: Record<string, number>; attackSuiteVersion?: string | null; topCluster?: string;
+  labelRule: string; threats?: Record<string, ThreatSpec>; threatRates?: Record<string, number>; attackSuiteVersion?: string | null; topCluster?: string;
 }): TaskDistribution {
-  return new TaskDistribution({ name, datasetHash: contentHash(scenarios.map((t) => t.toPlain(false))), labelRule: options.labelRule,
-    hazardRates: options.hazardRates ?? {}, attackSuiteVersion: options.attackSuiteVersion ?? null, topCluster: options.topCluster ?? "scenario" });
+  const threats = options.threats ?? Object.fromEntries([...new Set(scenarios.map((s) => s.threat))].map((t) => [t, NOMINAL_THREAT]));
+  return new TaskDistribution({ name, datasetHash: contentHash(scenarios.map((t) => t.toPlain(false))), labelRule: options.labelRule, threats,
+    threatRates: options.threatRates ?? {}, attackSuiteVersion: options.attackSuiteVersion ?? null, topCluster: options.topCluster ?? "scenario" });
 }
 
 function verifyBook(distribution: TaskDistribution, scenarios: readonly Scenario[], domain: Domain<unknown>): void {
@@ -58,12 +59,15 @@ function verifyBook(distribution: TaskDistribution, scenarios: readonly Scenario
   } else if (hash !== contentHash(domain.reproduce(distribution).map((t) => t.toPlain(false)))) {
     throw new ValidationError("Scenarios do not reproduce the bound generator configuration");
   }
+  for (const scenario of scenarios) {
+    if (!(scenario.threat in distribution.threats)) throw new ValidationError(`Scenario ${scenario.id} has threat ${scenario.threat}, which the distribution does not declare`);
+  }
   const originals = new Map(scenarios.filter((t) => !t.variantOf).map((t) => [t.id, t]));
   for (const scenario of scenarios) {
     if (!scenario.variantOf) continue;
     const base = originals.get(scenario.variantOf);
-    if (!base || base.label !== scenario.label || base.cluster !== scenario.cluster || contentHash(base.groundState) !== contentHash(scenario.groundState)) {
-      throw new ValidationError("Variants must retain original label, cluster, and ground state");
+    if (!base || base.label !== scenario.label || base.threat !== scenario.threat || base.cluster !== scenario.cluster || contentHash(base.groundState) !== contentHash(scenario.groundState)) {
+      throw new ValidationError("Variants must retain original label, threat, cluster, and ground state");
     }
   }
 }
@@ -152,22 +156,21 @@ export function observationRows(measurement: Measurement, options: { includeVari
   for (const trial of measurement.trials) {
     const scenario = scenarios.get(trial.scenarioId)!;
     if (scenario.variantOf && !options.includeVariants) continue;
-    const attempted: Record<string, boolean> = {}, occurred: Record<string, boolean> = {}, severity: Record<string, number> = {};
-    for (const event of trial.grades.events) {
-      const keys = [event.harm];
-      if (event.vector && event.vector !== "none") keys.push(`${event.harm}/${event.vector}`);
-      for (const key of keys) {
-        attempted[key] = (attempted[key] ?? false) || event.attempted;
-        occurred[key] = (occurred[key] ?? false) || event.occurred;
-        severity[key] = (severity[key] ?? 0) + event.severity;
-      }
-    }
+    const { outcome: o, mechanism: m } = trial.grades;
+    const consequenceClass = measurement.distribution.threats[scenario.threat]?.expectedConsequenceClass ?? null;
+    // Compatibility maps for the statistics layer: attempts read actions, occurrences read the final state.
+    const attempted: Record<string, boolean> = { deviation: o.attemptedDeviation, mandate_attempt: m.mandateAttempt };
+    for (const mechanism of m.detected) attempted[mechanism] = true;
+    const occurred: Record<string, boolean> = { deviation: !o.correct, ...trial.grades.consequences };
+    if (consequenceClass) occurred[consequenceClass] = !o.correct;
+    const severity: Record<string, number> = {};
     const signals = trial.transcript.steps.filter((s) => s.kind === "signal" && s.result && typeof s.result === "object" && !Array.isArray(s.result) && "riskSignal" in s.result)
       .map((s) => Number((s.result as { riskSignal: number }).riskSignal));
     rows.push({
       scenarioId: scenario.id, functionId: trial.functionId, repetition: trial.repetition, seed: trial.seed, cluster: scenario.cluster, label: scenario.label,
-      correct: trial.grades.outcome.correct, fieldF1: trial.grades.outcome.fieldF1, requiredEscalationMet: trial.grades.outcome.requiredEscalationMet,
-      ratings: clone(trial.grades.ratings), schemaValid: trial.grades.process.schemaValid, steps: trial.grades.process.steps, retries: trial.grades.process.retries,
+      threat: scenario.threat, correct: o.correct, fieldF1: o.fieldF1, action: o.action, goldAction: o.goldAction, deviation: o.deviation,
+      attemptedDeviation: o.attemptedDeviation, occurredDeviation: !o.correct, mechanisms: [...m.detected], primaryMechanism: m.primary, mandateAttempt: m.mandateAttempt,
+      mechanismPrecedence: [...m.precedence], consequences: { ...trial.grades.consequences }, consequenceClass, ratings: clone(trial.grades.ratings), schemaValid: trial.grades.process.schemaValid, steps: trial.grades.process.steps, retries: trial.grades.process.retries,
       tokens: trial.grades.process.tokens, cost: trial.grades.process.cost, latencyMs: trial.grades.process.latencyMs, pathSignature: trial.grades.process.pathSignature,
       attempted, occurred, severity, metrics: { ...trial.grades.metrics },
       riskSignal: signals.length ? signals[signals.length - 1] : null, variantOf: scenario.variantOf,

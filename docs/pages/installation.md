@@ -13,7 +13,7 @@ git clone https://github.com/felofix/signal-sdk
 cd signal-sdk
 npm install                      # typescript and @types/node only
 npm run build                    # tsc -> dist/
-node dist/src/cli.js validate    # eight PASS/FAIL simulation checks
+node dist/src/cli.js validate    # thirteen PASS/FAIL checks: statistics, then the bow-tie graders
 ```
 
 ```json
@@ -28,9 +28,14 @@ node dist/src/cli.js validate    # eight PASS/FAIL simulation checks
     {"name": "future_prediction_wider", "status": "PASS"},
     {"name": "calibration_cluster_separation", "status": "PASS"},
     {"name": "loss_recovers_planted_mean", "status": "PASS"},
-    {"name": "controls_separated", "status": "PASS"}
+    {"name": "threat_coverage", "status": "PASS", "scenariosPerThreat": {"nominal": 57, "missing_information": 11, "...": "..."}},
+    {"name": "controls_differ_per_threat", "status": "PASS", "skippedBecauseGoldAcceptsBothControls": ["prompt_injection_document", "..."]},
+    {"name": "controls_separated", "status": "PASS"},
+    {"name": "expected_mechanisms_observed", "status": "PASS"},
+    {"name": "primary_mechanism_unique", "status": "PASS", "wrongTrials": 285},
+    {"name": "planted_hallucination_recovered", "status": "PASS", "plantedFraction": 0.5, "recovered": 0.475}
   ],
-  "elapsedSeconds": 3.4
+  "elapsedSeconds": 4.4
 }
 ```
 

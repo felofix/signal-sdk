@@ -23,15 +23,16 @@ import { certificates, markdown } from "signal-sdk/certificate";
 
 for (const report of certificates(measurement)) {
   console.log(report.functionId.slice(0, 12), report.status);
-  console.log(report.columns.events.wrong_account.attempts);
+  console.log(report.columns.outcome.rows[0]);
   writeFileSync(`${report.functionId}.md`, markdown(report));
 }
 ```
 
 ```text
-bd5aade68e88 simulation
-{"estimate": 0, "interval": [0, 0.2752], "confidence": 0.95, "scenarios": 24, "clusters": 16,
- "zeroEventNote": "No events were observed in 24 scenarios across 16 independent clusters. The conservative one-sided 95% upper rate bound is …", ...}
+30ab1ab8dd78 simulation
+{"threat": "nominal", "barrier": "none", "goldActions": ["pay"], "n": 16, "trials": 48,
+ "correct": {"estimate": 1, "interval": [0.595, 1], ...}, "attemptedDeviation": {"estimate": 0, "interval": [0, 0.405], ...},
+ "occurredDeviation": {"estimate": 0, "interval": [0, 0.405], "zeroEventNote": "No events were observed in 16 scenarios across 16 independent clusters. …"}, "byLabel": {...}}
 ```
 
 ## RiskCertificate
@@ -40,8 +41,8 @@ bd5aade68e88 simulation
 |---|---|
 | `measurementId`, `functionId` | Content hashes. |
 | `status` | `simulation`, `measured`, `control`, `execution_errors_present`, `invalid_provider_version`. |
-| `columns` | `outcome`, `events`, `process`, `metrics` as returned by `summarize()`. |
-| `sections` | Ordered `{ title, data }` blocks: identity, distribution, environment and graders, validity, harm classes, custom metrics, loss, difficulty, consistency, calibration, robustness, injection, limitations, hours and cost, comparisons. |
+| `columns` | `outcome` and `mechanism` per threat (from `outcomeColumn()` / `mechanismColumn()`), plus `process` and `metrics` from `summarize()`. |
+| `sections` | Ordered `{ title, data }` blocks: identity, distribution, environment and graders, validity, outcome by threat, mechanism by threat, custom metrics, loss (only with a severity table), difficulty, consistency, calibration, robustness, attack suite, limitations, hours and cost, comparisons. |
 | `id` | Hash of the certificate. |
 
 ## compareMeasurements()

@@ -4,9 +4,9 @@ group: Get started
 summary: What Signal measures, in one screen.
 ---
 
-Signal is a statistical measuring instrument for agent systems. You give it a **function** (the thing under test), a **book** of scenarios (constructed test examples with a ground state), and a **domain** (the external world: tools, enforcement, graders). It runs every function on every scenario several times, grades each trial deterministically, and reads **rulers** off the results: accuracy with a 95% interval, pass^k, cost, harm rates, agreement between raters.
+Signal is a statistical measuring instrument for agent systems. You give it a **function** (the thing under test), a **book** of scenarios (constructed test examples, each with a threat class and a ground state), and a **domain** (the external world: tools, enforcement, graders). It runs every function on every scenario several times, grades each trial deterministically, and reads **rulers** off the results: accuracy with a 95% interval, pass^k, cost, deviation rates, agreement between raters.
 
-Nothing about a task domain lives in the core. Documents, payments, tool schemas and harm definitions are supplied by a `Domain`. The built-in one grades plain return values, so any callable — sync or async — is measurable in a few lines. The whole SDK is TypeScript for Node 20+ with no runtime dependencies; the statistics are implemented and tested in-repo.
+Nothing about a task domain lives in the core. Documents, payments, tool schemas and threat definitions are supplied by a `Domain`. The built-in one grades plain return values, so any callable — sync or async — is measurable in a few lines. The whole SDK is TypeScript for Node 20+ with no runtime dependencies; the statistics are implemented and tested in-repo.
 
 ## Example
 
@@ -36,15 +36,16 @@ console.log(experiment.table());
 | always_escalate (control) | 0.000 [0.000, 0.459] | 0.000 [0.000, 0.459] | 0.000 [0.000, 0.459] |
 ```
 
-## Three columns, never one number
+## Two columns, never one number
+
+Signal is arranged as a bow-tie: threats on the left, the top event in the knot, consequences on the right. It measures the knot first.
 
 | Column | What it holds |
 |---|---|
-| **Outcome** | Correct final state against the ground state, field-level F1 as support, escalation when it was required. |
-| **Events** | Per harm class: was it *attempted*, did it *occur*, and at what severity. A mandate can stop an occurrence without erasing the attempt. |
-| **Process** | Schema validity, steps, retries, actual tokens and cost, latency, the tool-call path signature. |
+| **Outcome** | Per threat: is the final state the ground state? A wrong outcome carries one canonical deviation (`wrong_action`, `wrong_value`, `missing_action`, `extra_action`). Attempted deviation is read from emitted actions, occurred deviation from the final state; their difference is what the mandate caught. |
+| **Mechanism** | Per threat, on wrong outcomes only: why. `injection_followed`, `compaction_loss`, `hallucination`, `tool_fault_mishandled`, or the residual `misinterpretation`, with exactly one primary chosen by a stated precedence. `mandate_attempt` is recorded on every trial because the barrier made those outcomes correct. |
 
-Rulers read any of these, plus custom `metrics` and `ratings` a domain or judge attaches. They are never summed into a composite score.
+Process (steps, retries, tokens, cost, latency, path) rides along, and rulers read any of it plus custom `metrics` and `ratings`. Loss is a separate section rendered only when you supply a severity table. Nothing is summed into a composite score.
 
 ## What it is not
 

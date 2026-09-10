@@ -154,9 +154,34 @@ export class ValidityPeriod {
   with(update: Partial<ValidityPeriodInit>): ValidityPeriod { return new ValidityPeriod({ ...this.toPlain(), ...update } as ValidityPeriodInit); }
 }
 
+/** Static metadata for one threat class, written before any run. */
+export interface ThreatSpec {
+  /** Accepted terminal action classes; the first is the primary gold action. */
+  goldActions: readonly string[];
+  /** Mechanisms plausible if a function fails on this threat. Coverage checks only, never grading. */
+  expectedMechanisms: readonly string[];
+  /** Loss class a failure maps to; a hook for the loss layer. */
+  expectedConsequenceClass: string | null;
+  /** Mitigating barrier meant to catch a failure here. */
+  barrier: "mandate" | "review" | "none";
+  /** Injection vector, for injection threats only. */
+  vector?: string | null;
+}
+
+export const NOMINAL_THREAT: ThreatSpec = Object.freeze({ goldActions: ["answer"], expectedMechanisms: ["misinterpretation", "hallucination"], expectedConsequenceClass: null, barrier: "none" });
+
+function threatSpec(name: string, value: unknown): ThreatSpec {
+  const spec = record(value, `threat ${name}`, false) as unknown as ThreatSpec;
+  check(Array.isArray(spec.goldActions) && spec.goldActions.length > 0 && spec.goldActions.every((a) => typeof a === "string"), `threat ${name} needs goldActions`);
+  check(Array.isArray(spec.expectedMechanisms ?? []), `threat ${name}: expectedMechanisms must be a list`);
+  check(["mandate", "review", "none"].includes(spec.barrier), `threat ${name}: barrier must be mandate, review or none`);
+  return { goldActions: [...spec.goldActions], expectedMechanisms: [...(spec.expectedMechanisms ?? [])], expectedConsequenceClass: spec.expectedConsequenceClass ?? null,
+    barrier: spec.barrier, vector: spec.vector ?? null };
+}
+
 export interface TaskDistributionInit {
   name: string; generator?: string | null; parameters?: JsonObject; seed?: number | null; datasetHash?: string | null;
-  hazardRates?: Record<string, number>; labelRule: string; attackSuiteVersion?: string | null; topCluster?: string;
+  threats?: Record<string, ThreatSpec>; threatRates?: Record<string, number>; labelRule: string; attackSuiteVersion?: string | null; topCluster?: string;
 }
 
 export class TaskDistribution {
@@ -165,25 +190,32 @@ export class TaskDistribution {
   readonly parameters: JsonObject;
   readonly seed: number | null;
   readonly datasetHash: string | null;
-  readonly hazardRates: Readonly<Record<string, number>>;
+  readonly threats: Readonly<Record<string, ThreatSpec>>;
+  readonly threatRates: Readonly<Record<string, number>>;
   readonly labelRule: string;
   readonly attackSuiteVersion: string | null;
   readonly topCluster: string;
 
   constructor(init: TaskDistributionInit) {
-    only(init, ["name", "generator", "parameters", "seed", "datasetHash", "hazardRates", "labelRule", "attackSuiteVersion", "topCluster"], ["id"]);
+    only(init, ["name", "generator", "parameters", "seed", "datasetHash", "threats", "threatRates", "labelRule", "attackSuiteVersion", "topCluster"], ["id"]);
     this.name = text(init.name, "name", 1);
     this.generator = init.generator ?? null;
     this.parameters = clone(record(init.parameters, "parameters"));
     this.seed = init.seed ?? null;
     this.datasetHash = init.datasetHash ?? null;
-    this.hazardRates = clone(record(init.hazardRates, "hazardRates")) as Record<string, number>;
+    const threats = record(init.threats ?? { nominal: NOMINAL_THREAT }, "threats", false);
+    this.threats = Object.fromEntries(Object.keys(threats).sort().map((k) => [k, threatSpec(k, threats[k])]));
+    check(Object.keys(this.threats).length > 0, "A distribution needs at least one threat class");
+    this.threatRates = clone(record(init.threatRates, "threatRates")) as Record<string, number>;
     this.labelRule = text(init.labelRule, "labelRule", 1);
     this.attackSuiteVersion = init.attackSuiteVersion ?? null;
     this.topCluster = init.topCluster ?? "scenario";
     check((this.generator === null) !== (this.datasetHash === null), "Supply either generator parameters with seed or a dataset hash");
     check(this.generator === null || this.seed !== null, "A generated distribution needs a seed");
-    for (const rate of Object.values(this.hazardRates)) number(rate, "hazard rate", { min: 0, max: 1 });
+    for (const [name, rate] of Object.entries(this.threatRates)) {
+      number(rate, `threat rate ${name}`, { min: 0, max: 1 });
+      check(name in this.threats, `threat rate ${name} has no threat class`);
+    }
     deepFreeze(this);
   }
 
@@ -192,7 +224,7 @@ export class TaskDistribution {
   toPlain(computed = true): JsonObject {
     const out: JsonObject = {
       name: this.name, generator: this.generator, parameters: this.parameters, seed: this.seed, datasetHash: this.datasetHash,
-      hazardRates: { ...this.hazardRates }, labelRule: this.labelRule, attackSuiteVersion: this.attackSuiteVersion, topCluster: this.topCluster,
+      threats: clone(this.threats) as unknown as Json, threatRates: { ...this.threatRates }, labelRule: this.labelRule, attackSuiteVersion: this.attackSuiteVersion, topCluster: this.topCluster,
     };
     if (computed) out.id = this.id;
     return out;
@@ -337,7 +369,7 @@ export class Hazard {
 }
 
 export interface ScenarioInit {
-  id: string; input: Json; environment?: JsonObject; construction?: JsonObject; label: string; hazards?: readonly (Hazard | HazardInit)[];
+  id: string; input: Json; environment?: JsonObject; construction?: JsonObject; label: string; threat?: string; hazards?: readonly (Hazard | HazardInit)[];
   groundState: JsonObject; cluster: string; template?: string; variantOf?: string | null;
 }
 
@@ -348,6 +380,7 @@ export class Scenario {
   readonly environment: JsonObject;
   readonly construction: JsonObject;
   readonly label: string;
+  readonly threat: string;
   readonly hazards: readonly Hazard[];
   readonly groundState: JsonObject;
   readonly cluster: string;
@@ -355,12 +388,13 @@ export class Scenario {
   readonly variantOf: string | null;
 
   constructor(init: ScenarioInit) {
-    only(init, ["id", "input", "environment", "construction", "label", "hazards", "groundState", "cluster", "template", "variantOf"], ["contentId"]);
+    only(init, ["id", "input", "environment", "construction", "label", "threat", "hazards", "groundState", "cluster", "template", "variantOf"], ["contentId"]);
     this.id = text(init.id, "id", 1);
     this.input = clone(plain(init.input));
     this.environment = clone(record(init.environment, "environment"));
     this.construction = clone(record(init.construction, "construction"));
     this.label = text(init.label, "label", 1);
+    this.threat = text(init.threat ?? "nominal", "threat", 1);
     this.hazards = Object.freeze((init.hazards ?? []).map((h) => (h instanceof Hazard ? h : new Hazard(h))));
     this.groundState = clone(record(init.groundState, "groundState", false));
     this.cluster = text(init.cluster, "cluster", 1);
@@ -373,7 +407,7 @@ export class Scenario {
 
   toPlain(computed = true): JsonObject {
     const out: JsonObject = {
-      id: this.id, input: this.input, environment: this.environment, construction: this.construction, label: this.label,
+      id: this.id, input: this.input, environment: this.environment, construction: this.construction, label: this.label, threat: this.threat,
       hazards: this.hazards.map((h) => h.toPlain()), groundState: this.groundState, cluster: this.cluster, template: this.template, variantOf: this.variantOf,
     };
     if (computed) out.contentId = this.contentId;
@@ -505,47 +539,60 @@ export class Outcome {
   toJSON(): JsonObject { return this.toPlain(true); }
 }
 
-export interface EventInit { harm: string; attempted: boolean; occurred: boolean; severity?: number; vector?: string | null; evidence?: readonly number[] }
+export const DEVIATIONS = ["wrong_action", "wrong_value", "missing_action", "extra_action"] as const;
+export type Deviation = (typeof DEVIATIONS)[number];
 
-export class Event {
-  readonly harm: string;
-  readonly attempted: boolean;
-  readonly occurred: boolean;
-  readonly severity: number;
-  readonly vector: string | null;
-  readonly evidence: readonly number[];
-
-  constructor(init: EventInit) {
-    only(init, ["harm", "attempted", "occurred", "severity", "vector", "evidence"]);
-    this.harm = text(init.harm, "harm", 1);
-    this.attempted = Boolean(init.attempted);
-    this.occurred = Boolean(init.occurred);
-    this.severity = number(init.severity ?? 0, "severity", { min: 0 });
-    this.vector = init.vector ?? null;
-    this.evidence = Object.freeze([...(init.evidence ?? [])].map((e) => number(e, "evidence", { min: 0, integer: true })));
-    deepFreeze(this);
-  }
-
-  toPlain(_computed = true): JsonObject { return { harm: this.harm, attempted: this.attempted, occurred: this.occurred, severity: this.severity, vector: this.vector, evidence: [...this.evidence] }; }
-  toJSON(): JsonObject { return this.toPlain(true); }
+export interface OutcomeGradeInit {
+  correct: boolean; fieldF1: number; action: string; goldAction: string; deviation?: Deviation | null; attemptedDeviation?: boolean;
 }
 
-export interface OutcomeGradeInit { correct: boolean; fieldF1: number; requiredEscalationMet?: boolean | null }
-
+/** The top event: does the final state match the ground state, and if not, how does it differ. */
 export class OutcomeGrade {
   readonly correct: boolean;
   readonly fieldF1: number;
-  readonly requiredEscalationMet: boolean | null;
+  readonly action: string;
+  readonly goldAction: string;
+  readonly deviation: Deviation | null;
+  readonly attemptedDeviation: boolean;
 
   constructor(init: OutcomeGradeInit) {
-    only(init, ["correct", "fieldF1", "requiredEscalationMet"]);
+    only(init, ["correct", "fieldF1", "action", "goldAction", "deviation", "attemptedDeviation"]);
     this.correct = Boolean(init.correct);
     this.fieldF1 = number(init.fieldF1, "fieldF1", { min: 0, max: 1 });
-    this.requiredEscalationMet = init.requiredEscalationMet ?? null;
+    this.action = text(init.action, "action", 1);
+    this.goldAction = text(init.goldAction, "goldAction", 1);
+    this.deviation = init.deviation ?? null;
+    check(this.deviation === null || (DEVIATIONS as readonly string[]).includes(this.deviation), "deviation must be one of the closed set");
+    check(this.correct === (this.deviation === null), "A wrong outcome needs a deviation and a correct one has none");
+    this.attemptedDeviation = init.attemptedDeviation ?? !this.correct;
     deepFreeze(this);
   }
 
-  toPlain(_computed = true): JsonObject { return { correct: this.correct, fieldF1: this.fieldF1, requiredEscalationMet: this.requiredEscalationMet }; }
+  toPlain(_computed = true): JsonObject {
+    return { correct: this.correct, fieldF1: this.fieldF1, action: this.action, goldAction: this.goldAction, deviation: this.deviation, attemptedDeviation: this.attemptedDeviation };
+  }
+  toJSON(): JsonObject { return this.toPlain(true); }
+}
+
+export interface MechanismGradeInit { detected?: readonly string[]; primary?: string | null; mandateAttempt?: boolean; precedence?: readonly string[] }
+
+/** Attribution from the transcript; primary is set only when the outcome is wrong. */
+export class MechanismGrade {
+  readonly detected: readonly string[];
+  readonly primary: string | null;
+  readonly mandateAttempt: boolean;
+  readonly precedence: readonly string[];
+
+  constructor(init: MechanismGradeInit = {}) {
+    only(init, ["detected", "primary", "mandateAttempt", "precedence"]);
+    this.detected = strings(init.detected, "detected");
+    this.primary = init.primary ?? null;
+    this.mandateAttempt = Boolean(init.mandateAttempt);
+    this.precedence = strings(init.precedence, "precedence");
+    deepFreeze(this);
+  }
+
+  toPlain(_computed = true): JsonObject { return { detected: [...this.detected], primary: this.primary, mandateAttempt: this.mandateAttempt, precedence: [...this.precedence] }; }
   toJSON(): JsonObject { return this.toPlain(true); }
 }
 
@@ -579,22 +626,25 @@ export class ProcessGrade {
 }
 
 export interface GradesInit {
-  outcome: OutcomeGrade | OutcomeGradeInit; events?: readonly (Event | EventInit)[]; process: ProcessGrade | ProcessGradeInit;
-  metrics?: Record<string, number>; ratings?: JsonObject;
+  outcome: OutcomeGrade | OutcomeGradeInit; mechanism?: MechanismGrade | MechanismGradeInit; consequences?: Record<string, boolean>;
+  process: ProcessGrade | ProcessGradeInit; metrics?: Record<string, number>; ratings?: JsonObject;
 }
 
-/** Three columns plus optional extras; nothing here is ever combined into one score. */
+/** Outcome and mechanism are the two measurement columns; process, metrics and ratings ride along. Nothing is combined into one score. */
 export class Grades {
   readonly outcome: OutcomeGrade;
-  readonly events: readonly Event[];
+  readonly mechanism: MechanismGrade;
+  readonly consequences: Readonly<Record<string, boolean>>;
   readonly process: ProcessGrade;
   readonly metrics: Readonly<Record<string, number>>;
   readonly ratings: JsonObject;
 
   constructor(init: GradesInit) {
-    only(init, ["outcome", "events", "process", "metrics", "ratings"]);
+    only(init, ["outcome", "mechanism", "consequences", "process", "metrics", "ratings"]);
     this.outcome = init.outcome instanceof OutcomeGrade ? init.outcome : new OutcomeGrade(init.outcome);
-    this.events = Object.freeze((init.events ?? []).map((e) => (e instanceof Event ? e : new Event(e))));
+    this.mechanism = init.mechanism instanceof MechanismGrade ? init.mechanism : new MechanismGrade(init.mechanism ?? {});
+    check(this.outcome.correct ? this.mechanism.primary === null : this.mechanism.primary !== null, "Exactly one primary mechanism on a wrong outcome, none on a correct one");
+    this.consequences = clone(record(init.consequences, "consequences")) as Record<string, boolean>;
     this.process = init.process instanceof ProcessGrade ? init.process : new ProcessGrade(init.process);
     const metrics = record(init.metrics, "metrics");
     for (const [key, value] of Object.entries(metrics)) number(value, `metric ${key}`);
@@ -604,10 +654,12 @@ export class Grades {
   }
 
   toPlain(_computed = true): JsonObject {
-    return { outcome: this.outcome.toPlain(), events: this.events.map((e) => e.toPlain()), process: this.process.toPlain(), metrics: { ...this.metrics }, ratings: this.ratings };
+    return { outcome: this.outcome.toPlain(), mechanism: this.mechanism.toPlain(), consequences: { ...this.consequences }, process: this.process.toPlain(), metrics: { ...this.metrics }, ratings: this.ratings };
   }
   toJSON(): JsonObject { return this.toPlain(true); }
-  with(update: Partial<GradesInit>): Grades { return new Grades({ outcome: this.outcome, events: this.events, process: this.process, metrics: this.metrics, ratings: this.ratings, ...update }); }
+  with(update: Partial<GradesInit>): Grades {
+    return new Grades({ outcome: this.outcome, mechanism: this.mechanism, consequences: this.consequences, process: this.process, metrics: this.metrics, ratings: this.ratings, ...update });
+  }
 }
 
 export interface TrialInit {

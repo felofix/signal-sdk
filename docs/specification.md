@@ -14,7 +14,10 @@ explorer, terminal view and local API. No framework dependency is included.
 | Ground states | `Scenario.groundState` | What should be true afterwards; graders compare outcomes against it. |
 | Crossed trials and seeds | `measure()` | Sync or async adapters; external provider seeds cannot be enforced remotely. |
 | Transcript and actual outcome | `Step`, `Transcript`, `Outcome` | Instrumentation must observe all real tool effects. |
-| Deterministic graders | `Domain.grade`, identified by `GraderDefinition` | Default grades return values; payments grades ten harms. No LLM judge anywhere. |
+| Threats | `TaskDistribution.threats` (closed enumeration with gold actions, expected mechanisms, consequence class, barrier); `Scenario.threat` | Prompt injection is a threat, not a special grader; one threat per scenario. |
+| Outcome column | One outcome grader per domain: `OutcomeGrade` with `deviation`, `attemptedDeviation` | Same grader for every threat; attempted from actions, occurred from state. |
+| Mechanism column | `gradeMechanisms()`: injection_followed, compaction_loss, hallucination, tool_fault_mishandled, mandate_attempt, misinterpretation | Fixed precedence; exactly one primary on a wrong outcome; misinterpretation is the residual. |
+| Deterministic graders | `Domain.grade`, identified by `GraderDefinition` | Default grades return values; payments grades ten threats. No LLM judge anywhere. |
 | Judges | `rateTrials()` ratings, `interRaterReliability()`, `agreementWithGrader()` | Ratings are experimental evidence; their reliability is measured; they never define insured harms. |
 | Three columns | Outcome, event and process types and reports | No combined score. |
 | Rulers and experiments | `Ruler`, `DEFAULT_RULERS`, `runExperiment()`, `evaluate()` | Comparisons in experiments are exploratory unless predeclared. |
@@ -31,7 +34,7 @@ explorer, terminal view and local API. No framework dependency is included.
 | Robustness | Cosmetic outcome signatures and fault mishandling | Built-in perturbations are whitespace/layout changes only. |
 | Loss per 10,000 | Assumed fixed/gamma/lognormal severity and beta/binomial frequency | No sum across overlapping classes; future excess cluster bursts not modeled. |
 | Drift | Random audit selection, typed review evidence, bounded e-process | Completed independent clusters, common inclusion probability, upward changes. |
-| Self-validation | Eight PASS/FAIL simulation and control checks | Selected planted regimes, not universal statistical certification. |
+| Self-validation | Thirteen PASS/FAIL checks: statistics plus threat coverage, control separation per threat, expected-mechanism visibility, primary uniqueness, planted hallucination | Selected planted regimes, not universal statistical certification. |
 | Risk certificate | Ordered Markdown/JSON plus the three columns | Missing signals, severity assumptions, or usable designs are explicitly unavailable. |
 | Pre/post report | Same scenarios/seeds, bound plan, paired results and both certificates | Different IDs are called different functions. |
 | Generated limitations | Distribution/period/suite/severity/provider-update facts | A provider version change invalidates the measurement. |

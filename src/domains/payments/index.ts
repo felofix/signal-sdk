@@ -1,13 +1,15 @@
-/** Optional constructed invoice-payment domain: tools, mandate, hazards and harm graders. */
+/** Optional constructed invoice-payment domain: tools, mandate, threats and graders. */
 
 import { Domain, type TrialContext } from "../../domain.js";
+import { MECHANISMS } from "../../mechanisms.js";
 import { EnvironmentDefinition, GraderDefinition, type JsonObject, type Scenario } from "../../models.js";
 import { ToolEnvironment } from "./environment.js";
-import { ATTACK_SUITE_VERSION, LABEL_RULE, cosmeticVariants, generateBook, generateScenarios, labelFromConstruction, reproduceBook } from "./generators.js";
-import { HARM_CLASSES, grade, gradeEvents, gradeOutcome } from "./graders.js";
+import { ATTACK_SUITE_VERSION, DEFAULT_THREAT_RATES, LABEL_RULE, THREATS, cosmeticVariants, generateBook, generateScenarios, labelFromConstruction, reproduceBook } from "./generators.js";
+import { CONSEQUENCE_DETECTORS, PROVENANCE_FIELDS, actionClass, detectConsequences, grade, gradeOutcome } from "./graders.js";
 import { Mandate } from "./models.js";
 
-export { ATTACK_SUITE_VERSION, HARM_CLASSES, LABEL_RULE, Mandate, ToolEnvironment, cosmeticVariants, generateBook, generateScenarios, grade, gradeEvents, gradeOutcome, labelFromConstruction, reproduceBook };
+export { ATTACK_SUITE_VERSION, CONSEQUENCE_DETECTORS, DEFAULT_THREAT_RATES, LABEL_RULE, Mandate, PROVENANCE_FIELDS, THREATS, ToolEnvironment, actionClass, cosmeticVariants,
+  detectConsequences, generateBook, generateScenarios, grade, gradeOutcome, labelFromConstruction, reproduceBook };
 export type { MandateInit } from "./models.js";
 
 export const TOOL_DESCRIPTIONS = {
@@ -34,8 +36,9 @@ export function alwaysEscalate(context: TrialContext<ToolEnvironment>): void {
 export function paymentsDomain(mandate: Mandate): Domain<ToolEnvironment> {
   return new Domain<ToolEnvironment>({
     environment: new EnvironmentDefinition({ name: "constructed-payments", implementation: { tools: "signal-payment-tools-v1" }, toolDescriptions: TOOL_DESCRIPTIONS, mandate: mandate.toPlain() }),
-    graders: new GraderDefinition({ name: "payments", version: "signal-graders-v1", components: {
-      outcome: "final payments, holds, emails and escalation against ground state", events: [...HARM_CLASSES], process: "steps, retries, usage, latency, path signature" } }),
+    graders: new GraderDefinition({ name: "payments", version: "signal-graders-v2", components: {
+      outcome: "terminal action class (pay | hold | escalate | none) and normalised payment values against the ground state; deviation from the closed set",
+      mechanism: [...MECHANISMS], consequences: [...CONSEQUENCE_DETECTORS], process: "steps, retries, usage, latency, path signature" } }),
     makeEnvironment: (scenario, seed, trace) => new ToolEnvironment(scenario, mandate, seed, trace),
     grade,
     controls: [["always_pay", alwaysPay], ["always_escalate", alwaysEscalate]],
@@ -43,7 +46,7 @@ export function paymentsDomain(mandate: Mandate): Domain<ToolEnvironment> {
   });
 }
 
-/** Whitelist everything in the book, so harmful attempts also occur and stay visible. */
+/** Whitelist everything in the book, so deviating attempts also occur and stay visible. */
 export function broadMandate(scenarios: readonly Scenario[], currency = "USD"): Mandate {
   const vendors = new Set<string>(), accounts = new Set<string>();
   let cap = 0;

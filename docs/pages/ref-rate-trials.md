@@ -56,4 +56,4 @@ A promise of a new `Measurement` with `ratings[rater]` set on every trial. Its `
 
 ## Notes
 
-Ratings are experimental evidence, not graders. They never enter `Event`s or the certificate's harm columns. The judge may be non-deterministic; that is exactly what reliability rulers measure.
+Ratings are experimental evidence, not graders. They never enter the outcome or mechanism columns. The judge may be non-deterministic; that is exactly what reliability rulers measure.

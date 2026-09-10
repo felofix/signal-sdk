@@ -16,7 +16,7 @@ test("html escapes transcripts and keeps goals and columns", async () => {
   const changed = measurement.with({ trials: [trial.with({ transcript }), ...measurement.trials.slice(1)] });
   const html = htmlDocument(changed);
   assert.ok(!html.includes("<script>alert(1)</script>") && html.includes("&lt;script&gt;alert(1)&lt;/script&gt;"));
-  for (const phrase of ["Reconcile invoice", "Verify authorization", "Outcome", "Events", "Process"]) assert.ok(html.includes(phrase), phrase);
+  for (const phrase of ["Reconcile invoice", "Verify authorization", "Outcome", "Mechanism", "Process"]) assert.ok(html.includes(phrase), phrase);
   assert.equal(buildFlamegraphData(measurement).length, measurement.scenarios.length * measurement.functions.length);
 });
 

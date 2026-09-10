@@ -53,7 +53,7 @@ console.log(results.accuracy);
 
 | Constructor | Metric | Interval |
 |---|---|---|
-| `rate(metric)` | `correct`, `fieldF1`, `schemaValid`, `cost`, `latencyMs`, `tokens`, `steps`, `retries`, `attempts:<harm>`, `occurrences:<harm>`, `loss:<harm>`, `metric:<name>` | Top-cluster bootstrap with cluster-t envelope; bounded to [0, 1] for rates. |
+| `rate(metric)` | `correct`, `fieldF1`, `schemaValid`, `attemptedDeviation`, `occurredDeviation`, `mandateAttempt`, `cost`, `latencyMs`, `tokens`, `steps`, `retries`, `attempts:deviation`, `attempts:<mechanism>`, `occurrences:deviation`, `occurrences:<consequence class>`, `loss:<consequence class>`, `metric:<name>` | Top-cluster bootstrap with cluster-t envelope; bounded to [0, 1] for rates. |
 | `accuracy()` | `correct` | Same. |
 | `passPowerK()` | all repetitions correct | Same, per scenario. |
 | `pathConsistency()` | identical `pathSignature` across repetitions | Same. |
@@ -64,4 +64,4 @@ console.log(results.accuracy);
 
 ## Rows
 
-`observationRows(measurement, { includeVariants? })` produces one `Row` per trial: `scenarioId`, `functionId`, `repetition`, `seed`, `cluster`, `label`, `correct`, `fieldF1`, `requiredEscalationMet`, `ratings`, `schemaValid`, `steps`, `retries`, `tokens`, `cost`, `latencyMs`, `pathSignature`, `attempted`, `occurred`, `severity`, `metrics`, `riskSignal`, `variantOf`, `groundStateHash`, `outcomeSignature`, `toolFault`, `executionError`.
+`observationRows(measurement, { includeVariants? })` produces one `Row` per trial: `scenarioId`, `functionId`, `repetition`, `seed`, `cluster`, `label`, `threat`, `correct`, `fieldF1`, `action`, `goldAction`, `deviation`, `attemptedDeviation`, `occurredDeviation`, `mechanisms`, `primaryMechanism`, `mandateAttempt`, `mechanismPrecedence`, `consequences`, `consequenceClass`, `ratings`, `schemaValid`, `steps`, `retries`, `tokens`, `cost`, `latencyMs`, `pathSignature`, `attempted`, `occurred`, `severity`, `metrics`, `riskSignal`, `variantOf`, `groundStateHash`, `outcomeSignature`, `toolFault`, `executionError`. The `attempted`/`occurred` maps carry `deviation`, each mechanism, `mandate_attempt` and each consequence class so the statistics layer reads them unchanged.

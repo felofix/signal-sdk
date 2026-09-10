@@ -35,7 +35,7 @@ console.log(report.pairedDifferences[0].comparisons[0].conclusion);   // non_inf
 
 ## Metrics you can compare
 
-`correct`, `fieldF1`, `schemaValid`, `cost`, `latencyMs`, `tokens`, `steps`, `retries`, `loss:<harm>` (currency per 10,000 scenarios), `metric:<name>` (needs `direction` and `unit`, optionally `valueBounds`). Positive advantage always favours the candidate.
+`correct`, `fieldF1`, `schemaValid`, `cost`, `latencyMs`, `tokens`, `steps`, `retries`, `loss:<consequence class>` (currency per 10,000 scenarios), `metric:<name>` (needs `direction` and `unit`, optionally `valueBounds`). Positive advantage always favours the candidate.
 
 ## Non-inferiority
 

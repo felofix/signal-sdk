@@ -15,8 +15,9 @@ import { interval, scenarioGroups } from "signal-sdk/statistics";
 const rulers = [
   accuracy(),                          // correct final state
   rate("fieldF1"),                     // any row metric with a cluster interval
-  rate("attempts:external_send"),      // harm attempt rate
-  rate("loss:external_send"),          // occurred severity, per scenario
+  rate("attempts:deviation"),          // attempted-deviation rate, read from emitted actions
+  rate("occurrences:deviation"),       // occurred-deviation rate, read from the final state
+  rate("attempts:mandate_attempt"),    // how often the barrier had to act
   rate("metric:searches", { higherIsBetter: false }),   // a domain metric
   passPowerK(),                        // all repetitions correct
   pathConsistency(),                   // identical tool-call path across repetitions
@@ -36,7 +37,7 @@ const fast = new Ruler("fast^k", (rows, samples, seed) => {
 | Ruler | Reads | Note |
 |---|---|---|
 | `accuracy()` | `correct` | Scenario-weighted; repetitions are averaged first. |
-| `rate(metric)` | any row metric | `correct`, `fieldF1`, `schemaValid`, `cost`, `latencyMs`, `tokens`, `steps`, `retries`, `attempts:<harm>`, `occurrences:<harm>`, `loss:<harm>`, `metric:<name>`. |
+| `rate(metric)` | any row metric | `correct`, `fieldF1`, `schemaValid`, `attemptedDeviation`, `occurredDeviation`, `mandateAttempt`, `cost`, `latencyMs`, `tokens`, `steps`, `retries`, `attempts:deviation`, `attempts:<mechanism>`, `occurrences:deviation`, `occurrences:<consequence class>`, `loss:<consequence class>`, `metric:<name>`. |
 | `passPowerK()` | `correct` per repetition | pass^k, not pass@k. |
 | `pathConsistency()` | `pathSignature` | Same ordered tool names across repetitions. |
 | `interRaterReliability(raters)` | `ratings` | Nominal Krippendorff's alpha; bootstrap over clusters. |
@@ -50,8 +51,8 @@ Every ruler returns `{ estimate, interval: [low, high], confidence: 0.95, cluste
 
 ## Judges
 
-A language-model judge is a rater. Run it over recorded transcripts with `rateTrials()`, then hold it against the deterministic grader with `agreementWithGrader()` and against other raters with `interRaterReliability()`. An alpha near 1 means the judge measures what the grader measures; below about 0.67 it is not yet a ruler. Deterministic graders still define insured harms.
+A language-model judge is a rater. Run it over recorded transcripts with `rateTrials()`, then hold it against the deterministic grader with `agreementWithGrader()` and against other raters with `interRaterReliability()`. An alpha near 1 means the judge measures what the grader measures; below about 0.67 it is not yet a ruler. Deterministic graders still define the measured columns.
 
 ## Writing a ruler
 
-A `Ruler` is a name plus `measure(rows, bootstrapSamples, seed) → { estimate, interval, ... }`. Rows are the objects from `observationRows()`: one per trial with `scenarioId`, `functionId`, `repetition`, `seed`, `cluster`, `label`, `correct`, `fieldF1`, process fields, `attempted`, `occurred`, `severity`, `metrics`, `ratings`, `riskSignal`. Average within a scenario first, then use `interval()` over clusters. Set `metric` if the ruler is a plain row metric so experiments can pair it.
+A `Ruler` is a name plus `measure(rows, bootstrapSamples, seed) → { estimate, interval, ... }`. Rows are the objects from `observationRows()`: one per trial with `scenarioId`, `functionId`, `repetition`, `seed`, `cluster`, `label`, `threat`, `correct`, `fieldF1`, `action`, `goldAction`, `deviation`, `attemptedDeviation`, `occurredDeviation`, `mechanisms`, `primaryMechanism`, `mandateAttempt`, `consequences`, process fields, `metrics`, `ratings`, `riskSignal`. Average within a scenario first, then use `interval()` over clusters. Set `metric` if the ruler is a plain row metric so experiments can pair it.

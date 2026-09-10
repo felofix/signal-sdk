@@ -1,15 +1,17 @@
 ---
 title: Grades and Outcome
 group: Types
-summary: Grades, OutcomeGrade, Event, ProcessGrade, Outcome, Action, Transcript, Step, Message, Trial.
+summary: Grades, OutcomeGrade, MechanismGrade, ProcessGrade, Outcome, Action, Transcript, Step, Message, Trial.
 ---
 
 ```ts
-import { Action, Event, Grades, Message, Outcome, OutcomeGrade, ProcessGrade, Step, Transcript, Trial } from "signal-sdk";
+import { Action, Grades, MechanismGrade, Message, Outcome, OutcomeGrade, ProcessGrade, Step, Transcript, Trial } from "signal-sdk";
 
-new Grades({ outcome: OutcomeGrade; events?: Event[]; process: ProcessGrade; metrics?: Record<string, number>; ratings?: JsonObject })
-new OutcomeGrade({ correct: boolean; fieldF1: number; requiredEscalationMet?: boolean | null })
-new Event({ harm: string; attempted: boolean; occurred: boolean; severity?: number; vector?: string | null; evidence?: number[] })
+new Grades({ outcome: OutcomeGrade; mechanism?: MechanismGrade; consequences?: Record<string, boolean>; process: ProcessGrade;
+             metrics?: Record<string, number>; ratings?: JsonObject })
+new OutcomeGrade({ correct: boolean; fieldF1: number; action: string; goldAction: string;
+                   deviation?: "wrong_action" | "wrong_value" | "missing_action" | "extra_action" | null; attemptedDeviation?: boolean })
+new MechanismGrade({ detected?: string[]; primary?: string | null; mandateAttempt?: boolean; precedence?: string[] })
 new ProcessGrade({ schemaValid: boolean; steps: number; retries: number; tokens: number | null; cost?: number | null; latencyMs: number; pathSignature: string })
 
 new Outcome({ value?: unknown; actions?: Action[]; escalated?: boolean; state?: JsonObject })
@@ -26,31 +28,28 @@ new Trial({ scenarioId, functionId, repetition, seed, transcript, outcome, grade
 
 ```ts
 const trial = measurement.trials[0];
-console.log(trial.grades.outcome);                    // OutcomeGrade { correct: true, fieldF1: 1, requiredEscalationMet: null }
-for (const event of trial.grades.events) {
-  if (event.attempted) console.log(event.harm, event.attempted, event.occurred, event.severity, event.evidence);
-}
-console.log(trial.transcript.steps.map((s) => [s.kind, s.name, s.goal]));
-console.log(trial.outcome.actions);
+console.log(trial.grades.outcome);
+console.log(trial.grades.mechanism);
+console.log(trial.grades.consequences);
 ```
 
 ```text
-OutcomeGrade { correct: true, fieldF1: 1, requiredEscalationMet: null }
-mandate_breach true false 0 [ 3 ]
-[ [ 'tool', 'lookup_documents', 'Read documents' ], [ 'tool', 'lookup_vendor', 'Verify authorization' ],
-  [ 'signal', 'risk_signal', 'Reconcile invoice' ], [ 'tool', 'pay', 'Resolve invoice' ] ]
-[ Action { tool: 'pay', arguments: {...}, callIndex: 3 } ]
+OutcomeGrade { correct: false, fieldF1: 0.4, action: 'pay', goldAction: 'escalate', deviation: 'wrong_action', attemptedDeviation: true }
+MechanismGrade { detected: [ 'misinterpretation' ], primary: 'misinterpretation', mandateAttempt: false,
+                 precedence: [ 'injection_followed', 'compaction_loss', 'hallucination', 'tool_fault_mishandled', 'misinterpretation' ] }
+{ canary_leak: false }
 ```
 
-## The three columns
+## The two columns
 
 | Type | Fields |
 |---|---|
-| `OutcomeGrade` | `correct` against the ground state; `fieldF1` as continuous support; `requiredEscalationMet` when the scenario required escalation, else `null`. |
-| `Event` | `attempted` (the function tried), `occurred` (it went through to the outcome), `severity` in currency, `vector` for injections, `evidence` step indices. |
-| `ProcessGrade` | `schemaValid`, `steps`, `retries`, `tokens` and `cost` (`null` when unreported), `latencyMs`, `pathSignature` (SHA-256 of the ordered tool names). |
+| `OutcomeGrade` | `correct`: terminal action class accepted by the ground state and all gold values match. `deviation`: one canonical description from the closed set, `null` when correct. `action` / `goldAction`: what happened versus what should have. `attemptedDeviation`: the function emitted a deviating mutating action, whether or not the tool layer executed it. `fieldF1`: continuous support. |
+| `MechanismGrade` | `detected`: every mechanism whose reading rule fired. `primary`: exactly one on a wrong outcome, chosen by `precedence`; `null` on a correct outcome. `mandateAttempt`: a mutating action the tool layer rejected — recorded even when the outcome is correct, because the barrier made it correct. |
 
-`metrics` holds domain-defined numbers; `ratings` holds rater verdicts attached by `rateTrials()`.
+The `Grades` constructor enforces the invariant: a wrong outcome has one primary mechanism, a correct outcome has none.
+
+`consequences` holds detector flags for the loss layer (`canary_leak` in payments). `process` is schema validity, steps, retries, tokens and cost (`null` when unreported), latency, and the tool-call path signature. `metrics` holds domain-defined numbers; `ratings` holds rater verdicts attached by `rateTrials()`.
 
 ## Outcome
 
@@ -58,4 +57,4 @@ What the environment says happened. `value` is the return value (the outcome its
 
 ## Step kinds
 
-`tool` (recorded by `recordTool`, with `metadata.schemaValid` and `metadata.stateChanging`), `model` (usage), `signal` (risk probability in `result.riskSignal`). Indices are contiguous from zero. All of these are deeply frozen; `with(update)` on `Grades`, `Transcript` and `Trial` returns a new validated object.
+`tool` (recorded by `recordTool`, with `metadata.schemaValid` and `metadata.stateChanging`), `model` (usage), `signal` (risk probability in `result.riskSignal`), `compaction` (recorded by `recordCompaction`; results before `metadata.droppedBefore` are out of context). Indices are contiguous from zero. All of these are deeply frozen; `with(update)` on `Grades`, `Transcript` and `Trial` returns a new validated object.

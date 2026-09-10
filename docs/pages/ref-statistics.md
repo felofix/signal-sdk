@@ -46,12 +46,12 @@ console.log(hard.status, hard.predictions[fn.id]?.nextBookCorrectRate);
 | Function | Result |
 |---|---|
 | `interval` | `estimate`, `interval`, `confidence`, `scenarios`, `clusters`, `method`, `zeroEventNote`. Top-cluster bootstrap with cluster-t envelope; conservative guards for degenerate samples. |
-| `summarize` | Per function: `outcome` (correct, fieldF1, requiredEscalationMet, by label), `events` (per harm: attempts, occurrences, counts, observed loss, by label), `process` (+ cost distribution), `consistency` (pass^k, path), `metrics`. |
+| `summarize` | Per function: `outcome` (correct, fieldF1, attempted/occurred deviation, escalatedWhenImpossible, by label and by threat), `events` (per attempted/occurred key: deviation, mechanisms, mandate_attempt, consequence classes), `process` (+ cost distribution), `consistency` (pass^k, path), `metrics`. The per-threat outcome and mechanism columns are built by `outcomeColumn()` and `mechanismColumn()` from `signal-sdk`. |
 | `compare` | Paired scenario differences with Bonferroni family-wise intervals and a `non_inferior` / `not_established` / `exploratory` conclusion per comparison. |
 | `difficulty` | Logistic mixed model `correct ~ function × label + (1|cluster) + (1|scenario) + (1|scenario:function)` fitted by Laplace approximation with Nelder–Mead on the three variance components; leave-function-out difficulty per scenario, label-explained variance, posterior predictions for the next 10,000 scenarios with a width check. Needs 12 scenarios, 2 functions, 4 clusters; dense, so capped at 2,500 coefficients. |
 | `calibrate` | Risk signal versus attempted events; threshold fitted on half the clusters, curves reported on the other half. |
 | `robustness` | Cosmetic outcome-change fraction over variants; tool-fault mishandled fraction. |
-| `lossDistribution` | Per harm: simulated loss per 10,000 scenarios from occurrence frequency (Jeffreys beta) and an assumed fixed / gamma / lognormal severity; mean, percentiles, tail mean, intervals. |
+| `lossDistribution` | Per consequence class: simulated loss per 10,000 scenarios from occurrence frequency (Jeffreys beta) and an assumed fixed / gamma / lognormal severity; mean, percentiles, tail mean, intervals. |
 | `sampleSize`, `detectableDifference` | Paired normal approximation with cluster design effect. |
 | `detectDrift` | Hoeffding e-process per metric over completed audit clusters, Bonferroni anytime threshold. Audit rows only. |
 

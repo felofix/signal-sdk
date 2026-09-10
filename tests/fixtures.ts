@@ -5,8 +5,14 @@ import { FunctionImplementation, measure } from "../src/runner.js";
 
 let cached: Promise<Measurement> | null = null;
 
+/** A nominal scenario: one clean invoice, gold action pay. */
 export function cleanScenario() {
-  return generateBook(1, { seed: 3, hazardRates: {}, impossibleRate: 0 }).scenarios[0];
+  return generateBook(1, { seed: 3, threatRates: {} }).scenarios[0];
+}
+
+/** One scenario of the given threat, found by generating a small book with that threat at rate 1. */
+export function threatScenario(threat: string) {
+  return generateBook(1, { seed: 5, threatRates: { [threat]: 1 } }).scenarios[0];
 }
 
 export function broadMandate() {

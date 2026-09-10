@@ -53,4 +53,4 @@ console.log(environment.id, graders.id);
 | Name | Meaning |
 |---|---|
 | `name`, `version` | Identify the measurement definition. |
-| `components` | What is graded: outcome rule, harm classes, process, metrics. The list of graders is the definition of what is measured. |
+| `components` | What is graded: outcome rule, mechanisms, consequence detectors, process, metrics. The list of graders is the definition of what is measured. |

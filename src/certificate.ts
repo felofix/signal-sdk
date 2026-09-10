@@ -3,6 +3,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { type Json, type JsonObject, type Measurement, ValidationError, contentHash, deepFreeze, plain } from "./models.js";
+import { mechanismColumn, outcomeColumn } from "./columns.js";
 import { observationRows } from "./runner.js";
 import { calibrate, robustness } from "./statistics/calibration.js";
 import { type CompareResult, type Estimate, compare, summarize } from "./statistics/core.js";
@@ -33,8 +34,8 @@ export function limitations(measurement: Measurement, functionId: string): strin
     "The unit is the scenario. Repetitions are dependent; top-level clusters are assumed exchangeable and independent. Shared effects across declared clusters invalidate these intervals.",
     "Confidence intervals use a top-cluster bootstrap with a cluster-t envelope and conservative bounded-sample guards. Coverage is approximate, especially with few clusters.",
     "Difficulty and loss predictions depend on printed model and severity assumptions. A 95% posterior interval is not a frequentist coverage guarantee.",
-    "Frequency measures attempted events; monetary loss uses occurred events. One action may trigger multiple harm classes; class losses are not summed into an insured total.",
-    "Only the listed deterministic graders define measured harms. Omitted harms and a function's textual claims provide no evidence of safe final state.",
+    "Attempted deviation is read from emitted actions and occurred deviation from the final state; their difference is the mitigating barrier's effect. Loss, when rendered, maps the outcome column through an assumed severity table and is not summed across threats.",
+    "One outcome grader defines correctness for every threat; mechanisms are attribution from the transcript and are reported only on wrong outcomes. A function's textual claims provide no evidence of safe final state.",
     "Calibration measures association with attempts; review curves assume loss prevention by review. They do not implement a router or establish a causal effect of human review.",
     "Drift is measured only on randomly selected, human-reviewed operational scenarios judged safe; this constructed measurement alone does not measure drift.",
     "Function adapters are trusted instrumentation. The runtime is not a security sandbox, and content hashes provide integrity checks, not a digital signature or external timestamp attestation.",
@@ -56,14 +57,17 @@ export function certificates(measurement: Measurement): RiskCertificate[] {
   const labels: Record<string, number> = {};
   for (const t of measurement.scenarios) if (!t.variantOf) labels[t.label] = (labels[t.label] ?? 0) + 1;
   const comparisons = withinComparisons(measurement, rows);
+  const threats = measurement.distribution.threats;
   return measurement.functions.map((fn) => {
     const fid = fn.id;
     const stats = summary.functions[fid];
     const selected = measurement.trials.filter((t) => t.functionId === fid);
+    const own = rows.filter((r) => r.functionId === fid);
+    const outcome = outcomeColumn(own, threats, { bootstrapSamples: config.bootstrapSamples, seed: config.seed });
+    const mechanism = mechanismColumn(own, threats, { bootstrapSamples: config.bootstrapSamples, seed: config.seed });
     const loss = lossDistribution(rows, { functionId: fid, severityAssumptions: config.severityAssumptions, simulations: config.lossSimulations, seed: config.seed });
     const calibration = calibrate(rows, { functionId: fid, targetResidualLoss: config.calibrationTargetResidualLoss, bootstrapSamples: config.bootstrapSamples, seed: config.seed });
     const costs = selected.map((t) => t.grades.process.cost);
-    const injection = Object.fromEntries(Object.entries(stats.events).filter(([k]) => k.startsWith("injection_followed/")));
     const versionErrors = selected.filter((t) => t.error && t.error.toLowerCase().includes("provider version"));
     let status = config.mode === "simulation" ? "simulation" : "measured";
     if (measurement.controlIds.includes(fid)) status = "control";
@@ -75,17 +79,19 @@ export function certificates(measurement: Measurement): RiskCertificate[] {
       { title: "Environment and graders", data: { environment: measurement.environment.toPlain(), graders: measurement.graders.toPlain() } },
       { title: "Validity and re-measurement", data: { period: measurement.validity ? measurement.validity.toPlain() : null, measurementTimestamp: measurement.timestamp,
         triggers: ["provider model update", "prompt change", "implementation or configuration change", "environment, tool or mandate change", "distribution change", "grader change", "period expiry"] } },
-      { title: "Harm classes", data: plain(stats.events) },
+      { title: "Outcome by threat", data: plain(outcome) },
+      { title: "Mechanism by threat", data: plain(mechanism) },
       { title: "Custom metrics", data: plain(stats.metrics) },
-      { title: "Loss per 10,000 scenarios", data: plain(loss) },
+      ...(Object.keys(config.severityAssumptions).length ? [{ title: "Loss per 10,000 scenarios", data: plain(loss) }] : []),
       { title: "Book difficulty", data: plain({ labelCounts: labels, outcome: stats.outcome,
         mixedModel: Object.fromEntries(Object.entries(hard).filter(([k]) => !["empiricalDifficulty", "predictions"].includes(k))),
         empiricalDifficulty: hard.empiricalDifficulty[fid] ?? null, prediction: hard.predictions[fid] ?? null }) },
       { title: "Consistency and process", data: plain({ consistency: stats.consistency, process: stats.process }) },
       { title: "Calibration", data: plain(calibration) },
       { title: "Robustness", data: plain(robust.functions[fid]) },
-      { title: "Injection by vector", data: plain({ rates: injection, scope: measurement.distribution.attackSuiteVersion
-        ? `Measured against the specific suite ${measurement.distribution.attackSuiteVersion}, not all attacks.` : "No attack suite was injected in this distribution." }) },
+      { title: "Attack suite", data: plain({ threats: Object.entries(threats).filter(([, s]) => s.vector).map(([name, s]) => ({ threat: name, vector: s.vector })),
+        scope: measurement.distribution.attackSuiteVersion
+        ? `Injection threats were measured against the specific suite ${measurement.distribution.attackSuiteVersion}, not all attacks.` : "No attack suite was injected in this distribution." }) },
       { title: "What this measurement does not say", data: limitations(measurement, fid) },
       { title: "Hours and cost spent", data: plain({ measurementWallHours: measurement.elapsedSeconds / 3600,
         functionStepHours: selected.reduce((s, t) => s + t.grades.process.latencyMs, 0) / 3600000,
@@ -93,7 +99,7 @@ export function certificates(measurement: Measurement): RiskCertificate[] {
         selfValidationSeconds: measurement.validation.elapsedSeconds ?? null, trialErrors: selected.map((t) => t.error).filter(Boolean) }) },
       { title: "Predeclared comparisons", data: plain(comparisons) },
     ];
-    return new RiskCertificate(measurement.id, fid, status, plain({ outcome: stats.outcome, events: stats.events, process: stats.process, metrics: stats.metrics }) as JsonObject, sections);
+    return new RiskCertificate(measurement.id, fid, status, plain({ outcome, mechanism, process: stats.process, metrics: stats.metrics }) as JsonObject, sections);
   });
 }
 
@@ -150,15 +156,27 @@ export function markdown(certificate: RiskCertificate): string {
   for (const section of certificate.sections) {
     lines.push(`## ${section.title}`, "");
     const data = section.data as never;
-    if (section.title === "Harm classes") {
-      const events = data as Record<string, { attemptedTrials: number; occurredTrials: number; attempts: Estimate; occurrences: Estimate }>;
-      if (!Object.keys(events).length) lines.push("No harm graders are defined in this domain; only outcome and process were measured.", "");
-      else {
-        lines.push("| Harm | Attempted trials | Occurred trials | Attempt rate [interval] | Occurrence rate [interval] |", "|---|---:|---:|---|---|");
-        for (const [name, event] of Object.entries(events)) lines.push(`| ${name} | ${event.attemptedTrials} | ${event.occurredTrials} | ${rate(event.attempts)} | ${rate(event.occurrences)} |`);
-        lines.push("");
-        for (const [name, event] of Object.entries(events)) if (event.attempts.zeroEventNote) lines.push(`${name}: ${event.attempts.zeroEventNote}`, "");
+    if (section.title === "Outcome by threat") {
+      const column = data as { rows: { threat: string; barrier: string | null; n: number; correct: Estimate; attemptedDeviation: Estimate; occurredDeviation: Estimate; byLabel: Record<string, { n: number; correct: Estimate; attemptedDeviation: Estimate; occurredDeviation: Estimate }> }[];
+        population: { n: number; correct: Estimate; attemptedDeviation: Estimate; occurredDeviation: Estimate; mix: Record<string, number>; note: string }; derived: { escalatedWhenImpossible: Estimate; unnecessaryEscalation: Estimate } };
+      lines.push("| Threat | Barrier | n | Correct [interval] | Attempted deviation [interval] | Occurred deviation [interval] |", "|---|---|---:|---|---|---|");
+      for (const row of column.rows) {
+        lines.push(`| ${row.threat} | ${row.barrier ?? ""} | ${row.n} | ${rate(row.correct)} | ${rate(row.attemptedDeviation)} | ${rate(row.occurredDeviation)} |`);
+        for (const [label, c] of Object.entries(row.byLabel)) lines.push(`| ↳ ${label} | | ${c.n} | ${rate(c.correct)} | ${rate(c.attemptedDeviation)} | ${rate(c.occurredDeviation)} |`);
       }
+      const mix = Object.entries(column.population.mix).map(([k, v]) => `${k} ${(v * 100).toFixed(0)}%`).join(", ");
+      lines.push(`| population (mix: ${mix}) | | ${column.population.n} | ${rate(column.population.correct)} | ${rate(column.population.attemptedDeviation)} | ${rate(column.population.occurredDeviation)} |`, "");
+      for (const row of column.rows) {
+        const note = row.occurredDeviation.zeroEventNote;
+        if (note) lines.push(`${row.threat}: ${note}`, "");
+      }
+      lines.push(`Escalated when impossible: ${rate(column.derived.escalatedWhenImpossible)}. Unnecessary escalation: ${rate(column.derived.unnecessaryEscalation)}.`, "");
+    } else if (section.title === "Mechanism by threat") {
+      const column = data as { precedence: string[]; note: string; rows: { threat: string; wrongTrials: number; expectedMechanisms: string[]; primary: Record<string, Estimate>; mandateAttempt: Estimate }[] };
+      const mechanisms = column.rows.length ? Object.keys(column.rows[0].primary) : [];
+      lines.push(`Precedence for the primary mechanism: ${column.precedence.join(" › ")}.`, "", `| Threat | Wrong trials | ${mechanisms.join(" | ")} | mandate_attempt (all trials) |`, `|---|---:|${"---|".repeat(mechanisms.length)}---|`);
+      for (const row of column.rows) lines.push(`| ${row.threat} | ${row.wrongTrials} | ${mechanisms.map((m) => rate(row.primary[m])).join(" | ")} | ${rate(row.mandateAttempt)} |`);
+      lines.push("", column.note, "");
     } else if (section.title === "Custom metrics") {
       const metrics = data as Record<string, Estimate>;
       if (!Object.keys(metrics).length) lines.push("No custom metrics are defined in this domain.", "");
@@ -183,10 +201,10 @@ export function markdown(certificate: RiskCertificate): string {
       for (const [harm, result] of Object.entries(loss.harms)) if (result.severityAssumption) lines.push(`- ${harm}: \`${JSON.stringify(plain(result.severityAssumption))}\``);
       lines.push("", ...loss.assumptions.map((a) => `- ${a}`), "");
     } else if (section.title === "Book difficulty") {
-      const d = data as { labelCounts: JsonObject; outcome: { correct: Estimate; fieldF1: Estimate; requiredEscalationMet: Estimate }; mixedModel: JsonObject;
+      const d = data as { labelCounts: JsonObject; outcome: { correct: Estimate; fieldF1: Estimate; escalatedWhenImpossible: Estimate }; mixedModel: JsonObject;
         empiricalDifficulty: { status: string; scenarios?: Record<string, number> } | null; prediction: { observedBookExpectedCorrectRate: Estimate; nextBookCorrectRate: Estimate; predictionWiderThanMeasuredInterval: boolean } | null };
       lines.push(`Labels: ${JSON.stringify(plain(d.labelCounts))}.`, "", `Correct final state: ${rate(d.outcome.correct)}.`, "", `Field-level F1: ${rate(d.outcome.fieldF1)}.`, "",
-        `Escalated when escalation was required: ${rate(d.outcome.requiredEscalationMet)}.`, "");
+        `Escalated when impossible: ${rate(d.outcome.escalatedWhenImpossible)}.`, "");
       lines.push(`Mixed model: ${String(d.mixedModel.status)}. ${String(d.mixedModel.method ?? d.mixedModel.reason ?? "")}`, "");
       if (typeof d.mixedModel.labelExplainedLatentFraction === "number") lines.push(`Label-explained latent variance fraction: ${d.mixedModel.labelExplainedLatentFraction.toPrecision(4)}.`, "");
       if (d.empiricalDifficulty?.status === "estimated" && d.empiricalDifficulty.scenarios) {
@@ -220,11 +238,9 @@ export function markdown(certificate: RiskCertificate): string {
     } else if (section.title === "Robustness") {
       const r = data as Record<string, Estimate | null>;
       for (const key of ["cosmeticOutcomeChangeFraction", "toolFaultMishandledFraction"]) lines.push(`${key}: ${r[key] ? rate(r[key]) : "not measured"}.`, "");
-    } else if (section.title === "Injection by vector") {
-      const inj = data as { scope: string; rates: Record<string, { attempts: Estimate; occurrences: Estimate }> };
-      lines.push(inj.scope, "", "| Vector | Attempt rate [interval] | Occurrence rate [interval] |", "|---|---|---|");
-      for (const [name, v] of Object.entries(inj.rates)) lines.push(`| ${name} | ${rate(v.attempts)} | ${rate(v.occurrences)} |`);
-      lines.push("");
+    } else if (section.title === "Attack suite") {
+      const suite = data as { scope: string; threats: { threat: string; vector: string }[] };
+      lines.push(suite.scope, "", ...suite.threats.map((th) => `- ${th.threat} (vector: ${th.vector})`), "");
     } else if (Array.isArray(data) && (data as unknown[]).every((v) => typeof v === "string")) {
       lines.push(...(data as string[]).map((item) => `- ${item}`), "");
     } else {

@@ -52,6 +52,12 @@ export class TraceRecorder {
     this.steps.push(new Step({ index: this.steps.length, kind: "signal", name, result: { riskSignal: probability }, cost: 0, ...this.goalMetadata() }));
   }
 
+  /** Mark that earlier context was compacted: results before this point are no longer visible to the function. */
+  recordCompaction(summary = ""): void {
+    this.steps.push(new Step({ index: this.steps.length, kind: "compaction", name: "compaction", result: summary || null, cost: 0,
+      metadata: { droppedBefore: this.steps.length }, ...this.goalMetadata() }));
+  }
+
   /** Run a tool through the recorder; schema errors are recorded, never hidden. */
   recordTool<T>(name: string, args: JsonObject, call: () => T, options: { stateChanging?: boolean } = {}): T {
     const started = performance.now();

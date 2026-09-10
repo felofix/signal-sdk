@@ -114,7 +114,7 @@ export function robustness(rows: Rows, options: { bootstrapSamples?: number; see
     const changedValues = [...variants.values()].map((pairs) => mean(pairs.map((p) => p.changed)));
     const changedClusters = [...variants.values()].map((pairs) => pairs[0].cluster);
     const faults = scenarioGroups(selected.filter((r) => r.toolFault));
-    const faultValues = [...faults.values()].map((trials) => mean(trials.map((r) => (r.attempted?.mishandled_tool_fault || r.occurred?.mishandled_tool_fault ? 1 : 0))));
+    const faultValues = [...faults.values()].map((trials) => mean(trials.map((r) => (r.mechanisms.includes("tool_fault_mishandled") ? 1 : 0))));
     const faultClusters = [...faults.values()].map((trials) => trials[0].cluster);
     results[fn] = {
       cosmeticOutcomeChangeFraction: variants.size ? interval(changedValues, changedClusters, { samples: bootstrapSamples, seed, bounds: [0, 1] }) : null,

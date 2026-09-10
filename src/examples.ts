@@ -1,7 +1,7 @@
 /** Transparent simulation functions: a generic return-value task and the payment domain. */
 
 import type { TrialContext } from "./domain.js";
-import { HARM_CLASSES, Mandate, type ToolEnvironment, generateBook, paymentsDomain } from "./domains/payments/index.js";
+import { Mandate, THREATS, type ToolEnvironment, generateBook, paymentsDomain } from "./domains/payments/index.js";
 import { Function, type JsonObject, Label, type Measurement, MeasurementConfig, ModelIdentity, type TaskDistribution, Scenario } from "./models.js";
 import { FunctionImplementation, datasetDistribution, measure } from "./runner.js";
 import { Rng } from "./statistics/random.js";
@@ -53,7 +53,8 @@ export function demoMandate(scenarios: readonly Scenario[]): Mandate {
 export async function demo(count = 48, seed = 7, repetitions = 3, variants = true): Promise<Measurement> {
   const { distribution, scenarios } = generateBook(count, { seed, vendors: Math.min(16, count), variants });
   const config = new MeasurementConfig({ repetitions, seed, mode: "simulation", bootstrapSamples: 500, lossSimulations: 1000,
-    severityAssumptions: Object.fromEntries(HARM_CLASSES.map((h) => [h, { distribution: "fixed" as const, amount: 100, currency: "USD" }])) });
+    severityAssumptions: Object.fromEntries([...new Set(Object.values(THREATS).map((t) => t.expectedConsequenceClass).filter((c): c is string => Boolean(c)))]
+      .map((c) => [c, { distribution: "fixed" as const, amount: 100, currency: "USD" }])) });
   return measure([new FunctionImplementation(demoDefinition(), reconcile, "simulation")], distribution, scenarios,
     { domain: paymentsDomain(demoMandate(scenarios)), config });
 }

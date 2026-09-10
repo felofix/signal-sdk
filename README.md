@@ -15,9 +15,11 @@ Deterministic graders · rulers · paired, clustered statistics · risk certific
 Signal runs a precisely identified **function** (the system under test) against a
 book of **scenarios** (constructed test examples with a ground state) inside an
 external **domain**, grades every trial deterministically, and reads **rulers**
-off the results: accuracy with a 95% interval, pass^k, cost, harm rates,
-agreement between raters. Three columns — **outcome**, **events**, **process** —
-never summed into one number.
+off the results. The report has two columns per threat, arranged as a bow-tie:
+**outcome** (does the final state match the ground state, and how does it deviate)
+and **mechanism** (why, attributed from the transcript). Attempted deviations are
+read from actions and occurred deviations from state; the gap is what the mandate
+caught. Nothing is summed into one number.
 
 TypeScript, Node 20+, zero runtime dependencies. The numerics (seeded RNG,
 cluster bootstrap, t/normal quantiles, Cholesky, a Laplace-approximation logistic
@@ -31,9 +33,9 @@ mixed model) live in `src/statistics/` and are auditable in-repo.
 git clone https://github.com/felofix/signal-sdk && cd signal-sdk
 npm install
 npm test                                                     # build + node:test suite
-node dist/src/cli.js validate                                # eight PASS/FAIL simulation checks
+node dist/src/cli.js validate                                # thirteen PASS/FAIL checks
 node dist/src/cli.js demo --generic --output outputs/generic # default domain, arithmetic book
-node dist/src/cli.js demo --output outputs/payments          # payments domain, injected hazards
+node dist/src/cli.js demo --output outputs/payments          # payments domain, ten threats
 ```
 
 Both demos run without provider calls and add the domain's two trivial controls.

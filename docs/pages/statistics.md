@@ -11,7 +11,7 @@ and predictive distributions. None is a composite measure of function quality.
 ## Crossed Design and Estimands
 
 For scenario `e`, function `f`, repetition `r`, let `Y[e,f,r]` be a measured outcome
-or harm indicator. Signal first averages repetitions within an scenario, then
+or deviation indicator. Signal first averages repetitions within a scenario, then
 averages those scenario values with equal weight. Repetitions assess stability;
 they do not increase the number of independent scenarios.
 
@@ -21,7 +21,7 @@ inconsistent repetition sets are rejected. Cosmetic variants are excluded from
 the main book estimand and analyzed with their originals separately.
 
 Attempt rate is the mean probability that a trial of an scenario attempts a given
-harm. Occurrence rate uses actual environment effects. The report additionally
+deviation. Occurrence rate uses actual final state. The report additionally
 counts affected trials and scenarios with at least one affected repetition. Those
 counts and the scenario-averaged rate answer different questions.
 
@@ -65,15 +65,15 @@ finite-sample choices, not universal optimal intervals.
 ### Pairing and Non-inferiority
 
 For each scenario, Signal differences the two functions' paired repetition means.
-For correctness, positive advantage is candidate minus reference. For harms,
+For correctness, positive advantage is candidate minus reference. For losses,
 positive advantage is reference loss minus candidate loss, multiplied by 10,000.
 The cluster bootstrap resamples these paired differences together.
 
-Every confirmatory comparison needs a pre-set margin. Monetary harm comparisons
-use `loss:<harm>` with a margin in currency per 10,000 scenarios. A constant loss
+Every confirmatory comparison needs a pre-set margin. Monetary loss comparisons
+use `loss:<consequence class>` with a margin in currency per 10,000 scenarios. A constant loss
 difference has no empirically identified unseen tail: without a declared maximum
 severity the interval is unavailable and non-inferiority is not established.
-`maximum_severity` bounds the entire harm-class loss of a trial, not a single
+`maximum_severity` bounds the entire consequence-class loss of a trial, not a single
 payment; observed trial losses exceeding it reject the comparison.
 
 Non-inferiority is concluded only when `lower_advantage_bound > -margin`.
@@ -187,8 +187,8 @@ fitting never reads the held-out outcomes. Reported operating points and the
 review curve use held-out clusters and pointwise intervals.
 
 The curve assumes review prevents all measured occurrence loss. To avoid counting
-one payment repeatedly under overlapping harm classes, its trial loss is the
-maximum occurred harm-class severity. This may understate multiple independent
+one payment repeatedly under overlapping consequence classes, its trial loss is the
+maximum occurred consequence-class severity. This may understate multiple independent
 simultaneous losses and is printed as an assumption. A fitted training constraint
 does not guarantee future residual loss. There is no operational routing product.
 
@@ -204,7 +204,7 @@ called mishandled.
 
 ## Frequency and Severity
 
-Loss is simulated separately per harm class, from occurrence frequency and a
+Loss is simulated separately per consequence class, from occurrence frequency and a
 specified fixed, gamma, or lognormal severity distribution. Currency and mean
 severity must be supplied. Gamma and lognormal distributions also use an assumed
 coefficient of variation. These are assumptions, not fitted severity guarantees.
@@ -220,7 +220,7 @@ bursts beyond that parameter uncertainty are not modeled.
 Reports give mean, median, 95th/99th percentiles, tail mean above the 99th percentile,
 expected-loss credible interval, and loss predictive interval. Zero observations
 retain positive frequency uncertainty. No assumed severity means no monetary
-prediction for that class. Harm classes are not summed, because one action can
+prediction for that class. Consequence classes are not summed, because one action can
 satisfy several graders.
 
 ## Audit-Only Sequential Drift

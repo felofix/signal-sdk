@@ -167,9 +167,9 @@ footer a { color: var(--ink-80); }
   <line x1="41.7" y1="38.0" x2="54.0" y2="46.6"/><line x1="37.2" y1="40.9" x2="39.8" y2="55.7"/><line x1="32.0" y1="39.7" x2="23.4" y2="52.0"/><line x1="29.1" y1="35.2" x2="14.3" y2="37.8"/><line x1="30.3" y1="30.0" x2="18.0" y2="21.4"/><line x1="34.8" y1="27.1" x2="32.2" y2="12.3"/><line x1="40.0" y1="28.3" x2="48.6" y2="16.0"/><line x1="42.9" y1="32.8" x2="57.7" y2="30.2"/><line x1="131.0" y1="100.5" x2="143.3" y2="109.1"/><line x1="126.5" y1="103.4" x2="129.1" y2="118.2"/><line x1="121.3" y1="102.2" x2="112.7" y2="114.5"/><line x1="118.4" y1="97.7" x2="103.6" y2="100.3"/><line x1="119.6" y1="92.5" x2="107.3" y2="83.9"/><line x1="124.1" y1="89.6" x2="121.5" y2="74.8"/><line x1="129.3" y1="90.8" x2="137.9" y2="78.5"/><line x1="132.2" y1="95.3" x2="147.0" y2="92.7"/><line x1="57.3" y1="48.9" x2="64.7" y2="54.1"/><line x1="77.0" y1="62.7" x2="84.3" y2="67.8"/><line x1="96.6" y1="76.4" x2="104.0" y2="81.6"/>
 </svg></div></div>
     <div class="hero-copy">
-      <p class="eyebrow">Signal SDK · 0.4.0</p>
+      <p class="eyebrow">Signal SDK · 0.5.0</p>
       <h1>A measuring instrument for agent systems.</h1>
-      <p class="lede">Run a precisely identified function against a constructed book of scenarios, grade every trial deterministically, and report three columns that are never summed into one number: outcome, events, process.</p>
+      <p class="lede">Run a precisely identified function against a constructed book of scenarios, grade every trial deterministically, and report two columns per threat that are never summed into one number: outcome (the top event) and mechanism (why).</p>
       <div class="actions">
         <a class="btn btn-solid" href="#example">See the example</a>
         <a class="btn btn-soft" href="https://github.com/felofix/signal-sdk">Repository</a>
@@ -192,7 +192,7 @@ footer a { color: var(--ink-80); }
       <div class="concept">
         <p class="eyebrow">Unit of statistics</p>
         <h3>Scenario</h3>
-        <p>One constructed task with a label fixed before any function runs: easy, complex, or impossible. Every function sees the same scenarios with the same seeds, so comparisons are paired and clustered.</p>
+        <p>One constructed test example with a label and exactly one threat class fixed before any function runs. Every function sees the same scenarios with the same seeds, so comparisons are paired and clustered.</p>
       </div>
     </div>
   </section>
@@ -271,7 +271,7 @@ footer a { color: var(--ink-80); }
     <div class="report" style="margin-top:2rem">
       <div class="report-head">
         <h3>Risk certificate · add</h3>
-        <span class="hash">function d9a5f4b4b5f6… · measurement 03de7442ffdf…</span>
+        <span class="hash">function d9a5f4b4b5f6… · measurement ad6f42c1e97e…</span>
       </div>
       <div class="columns3">
         <div class="col">
@@ -283,10 +283,11 @@ footer a { color: var(--ink-80); }
           </dl>
         </div>
         <div class="col">
-          <p class="eyebrow">Events</p>
+          <p class="eyebrow">Mechanism</p>
           <dl>
-            <dt>Unnecessary escalation, attempted</dt><dd class="num">0 / 72</dd><dd class="ci">rate 0.000 [0.000, 0.459]</dd>
-            <dt>Unnecessary escalation, occurred</dt><dd class="num">0 / 72</dd><dd class="ci">zero events, upper bound reported</dd>
+            <dt>Attempted deviation</dt><dd class="num">0 / 72</dd><dd class="ci">rate 0.000 [0.000, 0.459]</dd>
+            <dt>Occurred deviation</dt><dd class="num">0 / 72</dd><dd class="ci">zero events, upper bound reported</dd>
+            <dt>Primary mechanism on wrong trials</dt><dd class="num">—</dd><dd class="ci">no wrong outcomes to attribute</dd>
           </dl>
         </div>
         <div class="col">
@@ -298,7 +299,7 @@ footer a { color: var(--ink-80); }
           </dl>
         </div>
       </div>
-      <p class="note">Zero observed events is not zero risk. With six independent clusters the certificate prints the upper bound in plain language instead of a reassuring 0%.</p>
+      <p class="note">Zero observed deviations is not zero risk. With six independent clusters the certificate prints the upper bound in plain language instead of a reassuring 0%.</p>
       <p class="note">Difficulty model (Laplace-approximation logistic mixed model): label explains 29% of latent variance. Predicted correct rate on the next 10,000 scenarios 0.947 [0.845, 0.991], wider than the measured book's 0.957 [0.878, 0.991]. Prediction-width check: PASS.</p>
     </div>
   </section>
@@ -306,27 +307,26 @@ footer a { color: var(--ink-80); }
   <section class="section wrap" id="payments">
     <div class="section-head">
       <div>
-        <p class="eyebrow">Attempted vs. occurred</p>
+        <p class="eyebrow">Attempted vs. occurred, per threat</p>
         <h2>The same instrument on an agent that moves money.</h2>
-        <p>The optional payments domain adds tools, injected hazards and a mandate enforced in <code>pay()</code>. Here the <code>always_pay</code> control tried 36 payments the mandate did not allow. Frequency counts the attempts; loss counts what went through.</p>
+        <p>The optional payments domain adds tools, a closed enumeration of ten threats, and a mandate enforced in <code>pay()</code>. Column one is the outcome: did the final state match the ground state? Column two is the mechanism: why not. On the <code>duplicate</code> threat the reference policy tried to pay every time and the mandate refused every time: attempted 1.0, occurred 0.0. That gap is the barrier.</p>
       </div>
     </div>
     <div class="table-scroll">
       <table>
-        <thead><tr><th>Harm class</th><th>Function</th><th class="num">Attempted trials</th><th class="num">Occurred trials</th><th>Attempt rate [95%]</th><th>Stopped by</th></tr></thead>
+        <thead><tr><th>Threat</th><th>Function</th><th class="num">n</th><th>Correct [95%]</th><th>Attempted deviation [95%]</th><th>Occurred deviation [95%]</th><th>Primary mechanism on wrong trials</th></tr></thead>
         <tbody>
-          <tr><td>Mandate breach</td><td>always_pay</td><td class="num">36</td><td class="num">0</td><td class="mono">0.500 [0.295, 0.705]</td><td><span class="pill stop">mandate</span></td></tr>
-          <tr><td>Duplicate payment</td><td>always_pay</td><td class="num">15</td><td class="num">0</td><td class="mono">0.208 [0.029, 0.388]</td><td><span class="pill stop">mandate</span></td></tr>
-          <tr><td>Wrong account</td><td>always_pay</td><td class="num">12</td><td class="num">0</td><td class="mono">0.167 [0.014, 0.320]</td><td><span class="pill stop">mandate</span></td></tr>
-          <tr><td>Hallucinated action</td><td>always_pay</td><td class="num">12</td><td class="num">0</td><td class="mono">0.167 [0.014, 0.320]</td><td><span class="pill stop">mandate</span></td></tr>
-          <tr><td>Amount discrepancy</td><td>always_pay</td><td class="num">6</td><td class="num">0</td><td class="mono">0.083 [0.000, 0.206]</td><td><span class="pill stop">mandate</span></td></tr>
-          <tr><td>Mishandled tool fault</td><td>always_pay</td><td class="num">6</td><td class="num">6</td><td class="mono">0.083 [0.000, 0.200]</td><td><span class="pill through">went through</span></td></tr>
-          <tr><td>Unnecessary escalation</td><td>always_escalate</td><td class="num">48</td><td class="num">48</td><td class="mono">0.667 [0.446, 0.887]</td><td><span class="pill through">went through</span></td></tr>
-          <tr><td>Any of the ten</td><td>reconcile</td><td class="num">0</td><td class="num">0</td><td class="mono">0.000 [0.000, 0.275]</td><td>—</td></tr>
+          <tr><td>duplicate</td><td>reconcile</td><td class="num">6</td><td class="mono">1.000 [0.197, 1.000]</td><td class="mono">1.000 [0.197, 1.000]</td><td class="mono">0.000 [0.000, 0.803]</td><td><span class="pill stop">mandate_attempt 1.000</span></td></tr>
+          <tr><td>bank_detail_change</td><td>always_pay</td><td class="num">4</td><td class="mono">0.000 [0.000, 1.000]</td><td class="mono">1.000 [0.000, 1.000]</td><td class="mono">1.000 [0.000, 1.000]</td><td><span class="pill through">misinterpretation</span></td></tr>
+          <tr><td>missing_information</td><td>always_pay</td><td class="num">2</td><td class="mono">0.000 [0.000, 0.842]</td><td class="mono">1.000 [0.158, 1.000]</td><td class="mono">1.000 [0.158, 1.000]</td><td><span class="pill through">hallucination 0.5 · misinterpretation 0.5</span></td></tr>
+          <tr><td>tool_fault</td><td>always_pay</td><td class="num">3</td><td class="mono">0.000 [0.000, 0.708]</td><td class="mono">0.000 [0.000, 0.708]</td><td class="mono">1.000 [0.292, 1.000]</td><td><span class="pill through">tool_fault_mishandled</span></td></tr>
+          <tr><td>nominal</td><td>always_escalate</td><td class="num">16</td><td class="mono">0.000 [0.000, 0.405]</td><td class="mono">1.000 [0.595, 1.000]</td><td class="mono">1.000 [0.595, 1.000]</td><td><span class="pill through">misinterpretation</span></td></tr>
+          <tr><td>prompt_injection_*</td><td>reconcile</td><td class="num">10</td><td class="mono">1.000 [0.292, 1.000]</td><td class="mono">0.000 [0.000, 0.708]</td><td class="mono">0.000 [0.000, 0.708]</td><td>—</td></tr>
+          <tr><td>population (mix printed)</td><td>reconcile</td><td class="num">48</td><td class="mono">1.000 [0.794, 1.000]</td><td class="mono">0.125 [0.000, 0.253]</td><td class="mono">0.000 [0.000, 0.206]</td><td>—</td></tr>
         </tbody>
       </table>
     </div>
-    <p class="note" style="margin-top:1.25rem">24 invoices, 16 vendor clusters, 3 repetitions, 48 cosmetic variants for the robustness check: <code>reconcile</code> changed its outcome on 0 of 24 perturbed scenarios [0.000, 0.275]. Severity is assumed at 100 USD per occurrence and printed as an assumption; the loss distribution per 10,000 scenarios is simulated from it, not observed.</p>
+    <p class="note" style="margin-top:1.25rem">48 invoices, 16 vendor clusters, 3 repetitions, 96 cosmetic variants: <code>reconcile</code> changed its outcome on 0 of 48 perturbed scenarios. One outcome grader for every threat: an injection scenario is graded by whether its final state matches the ground state, not by an injection grader; <code>injection_followed</code> is a mechanism. Loss is a separate section, rendered only with a severity table, that reads this outcome column and each threat's consequence class.</p>
   </section>
 
   <section class="section wrap">
@@ -349,7 +349,7 @@ footer a { color: var(--ink-80); }
 
 <footer>
   <div class="wrap">
-    <span>signal · Signal SDK 0.4.0 · TypeScript, Node 20+ · numbers from <code>signal-sdk demo --generic --scenarios 24</code> and <code>signal-sdk demo --scenarios 24</code></span>
+    <span>signal · Signal SDK 0.5.0 · TypeScript, Node 20+ · numbers from <code>signal-sdk demo --generic --scenarios 24</code> and <code>signal-sdk demo --scenarios 24</code></span>
     <span><a href="https://github.com/felofix/signal-sdk">github.com/felofix/signal-sdk</a> · <a href="index.html">Docs</a> · <a href="index.html#/statistics">Statistics</a></span>
   </div>
 </footer>

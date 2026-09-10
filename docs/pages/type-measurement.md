@@ -64,8 +64,8 @@ Validation enforces a complete crossed design, identical seeds per (scenario, re
 
 ## Severity assumptions
 
-Per harm: `{ distribution?: "fixed" | "gamma" | "lognormal", amount | mean: number, coefficientOfVariation?: number, currency: string }`. The currency must equal `config.currency`. Missing assumptions mean no monetary loss is estimated for that harm.
+Per consequence class: `{ distribution?: "fixed" | "gamma" | "lognormal", amount | mean: number, coefficientOfVariation?: number, currency: string }`. The currency must equal `config.currency`. Missing assumptions mean no monetary loss is estimated for that consequence class.
 
 ## ConfirmatoryComparison
 
-`metric` is `correct`, `fieldF1`, `schemaValid`, `cost`, `latencyMs`, `tokens`, `steps`, `retries`, `loss:<harm>` or `metric:<name>`. Custom metrics need `direction` and `unit`. `margin` is in the metric's unit (currency per 10,000 for losses). `maximumSeverity` bounds a trial's loss so the interval is identified.
+`metric` is `correct`, `fieldF1`, `schemaValid`, `cost`, `latencyMs`, `tokens`, `steps`, `retries`, `loss:<consequence class>` or `metric:<name>`. Custom metrics need `direction` and `unit`. `margin` is in the metric's unit (currency per 10,000 for losses). `maximumSeverity` bounds a trial's loss so the interval is identified.

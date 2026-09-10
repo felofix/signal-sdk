@@ -15,7 +15,9 @@ Every certificate carries a limitations section derived from the actual configur
 - Difficulty uses an approximate Bayesian mixed model fitted by Laplace approximation; its intervals are credible intervals, not frequentist coverage guarantees. Predictions for the next 10,000 scenarios assume the observed label mixture and cluster size.
 - Calibration measures association between a runtime signal and attempted events; the review curve assumes review prevents loss. It is not a router.
 - Drift is measured only on randomly selected, human-reviewed operational trials that were judged safe.
-- Judge ratings are experimental evidence. Their reliability is measured; they do not define insured harms.
+- One outcome grader defines correctness for every threat; mechanisms are attribution from the transcript and are reported only on wrong outcomes. `misinterpretation` is a residual by construction.
+- Attempted deviation is read from emitted actions and occurred deviation from the final state; the difference is the barrier's effect, not a causal estimate of what would have happened without it.
+- Judge ratings are experimental evidence. Their reliability is measured; they do not define the measured columns.
 - Function adapters are trusted instrumentation. Content hashes are integrity checks, not signatures or timestamps.
 - Self-validation passes finite seeded checks in selected regimes; it is not universal statistical validation.
 
