@@ -1,50 +1,50 @@
 ---
-title: dataset_distribution()
+title: datasetDistribution()
 group: SDK reference
 summary: Bind a hand-built book by the hash of its complete content.
 ---
 
-```python
-from signal_sdk import dataset_distribution
+```ts
+import { datasetDistribution } from "signal-sdk";
 
-dataset_distribution(
-    name: str,
-    trajectories: tuple[Trajectory, ...],
-    *,
-    label_rule: str,
-    hazard_rates: dict[str, float] | None = None,
-    attack_suite_version: str | None = None,
-    top_cluster: str = "trajectory",
-) -> TaskDistribution
+datasetDistribution(
+  name: string,
+  scenarios: Scenario[],
+  options: {
+    labelRule: string;
+    hazardRates?: Record<string, number>;      // {}
+    attackSuiteVersion?: string | null;        // null
+    topCluster?: string;                       // "scenario"
+  },
+): TaskDistribution
 ```
 
 ## Example
 
-```python
-distribution = dataset_distribution(
-    "Support tickets v2", book,
-    label_rule="refund if the ticket asks for money back; escalate if it mentions legal action; otherwise routine",
-    hazard_rates={"prompt_injection": 0.04}, attack_suite_version="tickets-inj-1",
-    top_cluster="customer",
-)
-print(distribution.id, distribution.dataset_hash[:12])
+```ts
+const distribution = datasetDistribution("Support tickets v2", book, {
+  labelRule: "refund if the ticket asks for money back; escalate if it mentions legal action; otherwise routine",
+  hazardRates: { prompt_injection: 0.04 }, attackSuiteVersion: "tickets-inj-1",
+  topCluster: "customer",
+});
+console.log(distribution.id, distribution.datasetHash?.slice(0, 12));
 ```
 
 ## Parameters
 
 | Name | Type | | |
 |---|---|---|---|
-| `name` | `str` | required | Human name of the book. |
-| `trajectories` | `tuple[Trajectory, ...]` | required | The complete book; its content hash becomes `dataset_hash`. |
-| `label_rule` | `str` | required | The written rule that produced the labels. |
-| `hazard_rates` | `dict[str, float]` | `{}` | Construction probabilities of injected hazards. |
-| `attack_suite_version` | `str` | `None` | Names the injection suite; `None` means no adversarial content. |
-| `top_cluster` | `str` | `"trajectory"` | What `Trajectory.cluster` denotes. |
+| `name` | `string` | required | Human name of the book. |
+| `scenarios` | `Scenario[]` | required | The complete book; its content hash becomes `datasetHash`. |
+| `options.labelRule` | `string` | required | The written rule that produced the labels. |
+| `options.hazardRates` | `Record<string, number>` | `{}` | Construction probabilities of injected hazards. |
+| `options.attackSuiteVersion` | `string` | `null` | Names the injection suite; `null` means no adversarial content. |
+| `options.topCluster` | `string` | `"scenario"` | What `Scenario.cluster` denotes. |
 
 ## Returns
 
-A `TaskDistribution` with `dataset_hash` set. `measure()` recomputes the hash and refuses a book that was edited afterwards.
+A `TaskDistribution` with `datasetHash` set. `measure()` recomputes the hash and refuses a book that was edited afterwards.
 
 ## Notes
 
-For generated books use the domain's generator (for example `signal_sdk.domains.payments.generate_book`), which binds parameters and seed and lets the runner regenerate the book to verify it.
+For generated books use the domain's generator (for example `generateBook` from `signal-sdk/domains/payments`), which binds parameters and seed and lets the runner regenerate the book to verify it.

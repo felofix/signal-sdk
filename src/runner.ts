@@ -1,0 +1,180 @@
+/** Crossed execution with isolated environments, domain controls, and a validation gate. */
+
+import { createHash } from "node:crypto";
+import { performance } from "node:perf_hooks";
+import { type Domain, type Execute, RETURN_VALUES } from "./domain.js";
+import {
+  Function, Measurement, MeasurementConfig, TaskDistribution, Scenario, Trial, ValidationError, type ValidityPeriod,
+  clone, contentHash, now,
+} from "./models.js";
+import type { Row } from "./statistics/core.js";
+import { TraceRecorder } from "./tracing.js";
+import { selfValidate } from "./validation.js";
+
+export type ImplementationKind = "real" | "simulation" | "control";
+
+export class FunctionImplementation<Tools = unknown> {
+  readonly definition: Function;
+  readonly execute: Execute<Tools>;
+  readonly kind: ImplementationKind;
+
+  constructor(definition: Function, execute: Execute<Tools>, kind: ImplementationKind = "real") {
+    if (!["real", "simulation", "control"].includes(kind) || typeof execute !== "function") {
+      throw new ValidationError("A function implementation needs a callable and a valid execution kind");
+    }
+    this.definition = definition;
+    this.execute = execute;
+    this.kind = kind;
+    Object.freeze(this);
+  }
+}
+
+/** Controls are functions like any other; their identity is the control itself. */
+export function controlFunctions<Tools>(domain: Domain<Tools>): FunctionImplementation<Tools>[] {
+  return domain.controls.map(([name, execute]) =>
+    new FunctionImplementation(new Function({ name, implementation: { control: name, domain: domain.environment.name } }), execute, "control"));
+}
+
+export function trialSeed(masterSeed: number, scenario: Scenario, repetition: number): number {
+  // A variant has the seed of its original, including across functions.
+  const identity = `${masterSeed}:${scenario.variantOf ?? scenario.id}:${repetition}`;
+  return createHash("sha256").update(identity).digest().readUInt32BE(0);
+}
+
+/** Bind a hand-built book by the hash of its complete content. */
+export function datasetDistribution(name: string, scenarios: readonly Scenario[], options: {
+  labelRule: string; hazardRates?: Record<string, number>; attackSuiteVersion?: string | null; topCluster?: string;
+}): TaskDistribution {
+  return new TaskDistribution({ name, datasetHash: contentHash(scenarios.map((t) => t.toPlain(false))), labelRule: options.labelRule,
+    hazardRates: options.hazardRates ?? {}, attackSuiteVersion: options.attackSuiteVersion ?? null, topCluster: options.topCluster ?? "scenario" });
+}
+
+function verifyBook(distribution: TaskDistribution, scenarios: readonly Scenario[], domain: Domain<unknown>): void {
+  const hash = contentHash(scenarios.map((t) => t.toPlain(false)));
+  if (distribution.datasetHash) {
+    if (hash !== distribution.datasetHash) throw new ValidationError("Scenario content does not match the distribution dataset hash");
+  } else if (!domain.reproduce) {
+    throw new ValidationError("This domain cannot reproduce generated books; bind scenarios with datasetDistribution");
+  } else if (hash !== contentHash(domain.reproduce(distribution).map((t) => t.toPlain(false)))) {
+    throw new ValidationError("Scenarios do not reproduce the bound generator configuration");
+  }
+  const originals = new Map(scenarios.filter((t) => !t.variantOf).map((t) => [t.id, t]));
+  for (const scenario of scenarios) {
+    if (!scenario.variantOf) continue;
+    const base = originals.get(scenario.variantOf);
+    if (!base || base.label !== scenario.label || base.cluster !== scenario.cluster || contentHash(base.groundState) !== contentHash(scenario.groundState)) {
+      throw new ValidationError("Variants must retain original label, cluster, and ground state");
+    }
+  }
+}
+
+export async function execute<Tools>(implementation: FunctionImplementation<Tools>, scenario: Scenario, repetition: number, seed: number,
+  domain: Domain<Tools> = RETURN_VALUES as unknown as Domain<Tools>): Promise<Trial> {
+  const trace = new TraceRecorder();
+  const tools = domain.makeEnvironment(scenario, seed, trace);
+  const input = scenario.input;
+  const task = input && typeof input === "object" && !Array.isArray(input) && "task" in input ? input.task : input;
+  trace.appendMessage("user", typeof task === "string" ? task : JSON.stringify(task));
+  const context = { input: clone(scenario.input), tools, trace, seed, repetition };
+  let error: string | null = null;
+  let response: unknown = null;
+  try {
+    response = await implementation.execute(context);
+    if (response !== null && response !== undefined) trace.appendMessage("assistant", typeof response === "string" ? response : JSON.stringify(response));
+    if (implementation.kind === "real") {
+      const modelSteps = trace.steps.filter((s) => s.kind === "model");
+      if (!modelSteps.length) throw new ValidationError("Real functions must record actual model usage and providerVersion");
+      const versions = new Set(implementation.definition.modelIdentities.map((m) => m.version));
+      if (modelSteps.some((s) => !versions.has(String(s.metadata.providerVersion)))) {
+        throw new ValidationError("Observed provider version does not match the insured function");
+      }
+    }
+  } catch (caught) {
+    const e = caught as Error;
+    error = `${e.name}: ${e.message}`;
+    trace.appendMessage("execution_error", error);
+  }
+  if (implementation.kind === "real" && !trace.steps.some((s) => s.kind === "model")) {
+    trace.recordUsage({ tokens: null, cost: null, name: "unreported_usage", metadata: { usageMissing: true } });
+  }
+  const transcript = trace.transcript();
+  const outcome = tools.finish(response);
+  return new Trial({ scenarioId: scenario.id, functionId: implementation.definition.id, repetition, seed, transcript, outcome,
+    grades: domain.grade(scenario, transcript, outcome), error });
+}
+
+export interface MeasureOptions<Tools> {
+  domain?: Domain<Tools>; config?: MeasurementConfig | null; validity?: ValidityPeriod | null; onTrial?: (trial: Trial) => void;
+}
+
+/** Run the full crossing. Domain controls and self-validation are mandatory. */
+export async function measure<Tools = unknown>(functions: readonly FunctionImplementation<Tools>[], distribution: TaskDistribution,
+  scenarios: readonly Scenario[], options: MeasureOptions<Tools> = {}): Promise<Measurement> {
+  const domain = (options.domain ?? RETURN_VALUES) as unknown as Domain<Tools>;
+  const config = options.config ?? new MeasurementConfig({ mode: "real" });
+  if (!functions.length) throw new ValidationError("Provide at least one function implementation");
+  verifyBook(distribution, scenarios, domain as unknown as Domain<unknown>);
+  const timestamp = now();
+  if (options.validity && !options.validity.contains(timestamp)) throw new ValidationError("Measurement must occur within its validity period");
+  if (config.mode === "simulation" && functions.some((f) => f.kind === "real")) throw new ValidationError("Real functions cannot run in simulation mode");
+  if (config.mode === "real" && functions.some((f) => f.kind !== "real")) throw new ValidationError("Real mode requires real function implementations");
+  if (functions.some((f) => f.kind === "control")) throw new ValidationError("Controls are added by the runner; supply measured functions only");
+  const definitions = new Set(functions.map((f) => f.definition.id));
+  if (definitions.size !== functions.length) throw new ValidationError("Function identities must be distinct");
+  for (const comparison of config.confirmatoryComparisons) {
+    if (!definitions.has(comparison.referenceId) || !definitions.has(comparison.candidateId)) throw new ValidationError("Predeclared comparisons must reference supplied functions");
+  }
+  const validation = await selfValidate();
+  if (validation.status !== "PASS") throw new Error("Self-validation failed; no function execution is allowed");
+  const controls = controlFunctions(domain);
+  const implementations = [...functions, ...controls];
+  const started = performance.now();
+  const trials: Trial[] = [];
+  for (const scenario of scenarios) {
+    for (let repetition = 0; repetition < config.repetitions; repetition++) {
+      const seed = trialSeed(config.seed, scenario, repetition);
+      for (const implementation of implementations) {
+        const trial = await execute(implementation, scenario, repetition, seed, domain);
+        trials.push(trial);
+        options.onTrial?.(trial);
+      }
+    }
+  }
+  return new Measurement({ functions: implementations.map((f) => f.definition), distribution, environment: domain.environment, graders: domain.graders,
+    validity: options.validity ?? null, controlIds: controls.map((c) => c.definition.id), scenarios, trials, timestamp, config,
+    validation: validation as unknown as Record<string, never>, elapsedSeconds: (performance.now() - started) / 1000 });
+}
+
+/** Flatten statistical inputs without treating perturbations as new book scenarios. */
+export function observationRows(measurement: Measurement, options: { includeVariants?: boolean } = {}): Row[] {
+  const scenarios = new Map(measurement.scenarios.map((t) => [t.id, t]));
+  const rows: Row[] = [];
+  for (const trial of measurement.trials) {
+    const scenario = scenarios.get(trial.scenarioId)!;
+    if (scenario.variantOf && !options.includeVariants) continue;
+    const attempted: Record<string, boolean> = {}, occurred: Record<string, boolean> = {}, severity: Record<string, number> = {};
+    for (const event of trial.grades.events) {
+      const keys = [event.harm];
+      if (event.vector && event.vector !== "none") keys.push(`${event.harm}/${event.vector}`);
+      for (const key of keys) {
+        attempted[key] = (attempted[key] ?? false) || event.attempted;
+        occurred[key] = (occurred[key] ?? false) || event.occurred;
+        severity[key] = (severity[key] ?? 0) + event.severity;
+      }
+    }
+    const signals = trial.transcript.steps.filter((s) => s.kind === "signal" && s.result && typeof s.result === "object" && !Array.isArray(s.result) && "riskSignal" in s.result)
+      .map((s) => Number((s.result as { riskSignal: number }).riskSignal));
+    rows.push({
+      scenarioId: scenario.id, functionId: trial.functionId, repetition: trial.repetition, seed: trial.seed, cluster: scenario.cluster, label: scenario.label,
+      correct: trial.grades.outcome.correct, fieldF1: trial.grades.outcome.fieldF1, requiredEscalationMet: trial.grades.outcome.requiredEscalationMet,
+      ratings: clone(trial.grades.ratings), schemaValid: trial.grades.process.schemaValid, steps: trial.grades.process.steps, retries: trial.grades.process.retries,
+      tokens: trial.grades.process.tokens, cost: trial.grades.process.cost, latencyMs: trial.grades.process.latencyMs, pathSignature: trial.grades.process.pathSignature,
+      attempted, occurred, severity, metrics: { ...trial.grades.metrics },
+      riskSignal: signals.length ? signals[signals.length - 1] : null, variantOf: scenario.variantOf,
+      groundStateHash: contentHash(scenario.groundState),
+      outcomeSignature: contentHash({ value: trial.outcome.value, escalated: trial.outcome.escalated, actions: trial.outcome.actions.map((a) => [a.tool, a.arguments]) }),
+      toolFault: scenario.hazards.some((h) => h.type === "tool_fault"), executionError: trial.error,
+    });
+  }
+  return rows;
+}

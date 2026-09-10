@@ -4,58 +4,55 @@ group: Get started
 summary: Compare variants on one book, pick your rulers, attach a judge.
 ---
 
-An experiment is several functions on the same book, read with the same rulers. Every function sees the same trajectories with the same seeds, so differences are paired. Comparisons are exploratory unless you predeclare them.
+An experiment is several functions on the same book, read with the same rulers. Every function sees the same scenarios with the same seeds, so differences are paired. Comparisons are exploratory unless you predeclare them.
 
 ## Example
 
-```python
-from signal_sdk import (DEFAULT_RULERS, Function, FunctionImplementation, rate,
-                        inter_rater_reliability, agreement_with_grader,
-                        run_experiment, rate_trials, evaluate)
-from signal_sdk.examples import add, arithmetic_book
+```ts
+import { DEFAULT_RULERS, Function, FunctionImplementation, agreementWithGrader, evaluate,
+         interRaterReliability, rate, rateTrials, runExperiment } from "signal-sdk";
+import { add, arithmeticBook } from "signal-sdk/examples";
 
-distribution, book = arithmetic_book(24, seed=0)
+const { distribution, scenarios } = arithmeticBook(24, 0);
 
-def sloppy(context):
-    result = add(context)
-    return result + 1 if result is not None and result % 7 == 0 else result
+const sloppy: typeof add = (context) => { const r = add(context); return r !== null && r % 7 === 0 ? r + 1 : r; };
 
-variants = (
-    FunctionImplementation(Function(name="add", implementation={"revision": "1"}), add, "simulation"),
-    FunctionImplementation(Function(name="sloppy", implementation={"revision": "2"}), sloppy, "simulation"),
-)
-experiment = run_experiment("adders", variants, distribution, book, repetitions=2,
-                            rulers=DEFAULT_RULERS + (rate("tokens"),), baseline="add")
-print(experiment.table())
+const variants = [
+  new FunctionImplementation(new Function({ name: "add", implementation: { revision: "1" } }), add, "simulation"),
+  new FunctionImplementation(new Function({ name: "sloppy", implementation: { revision: "2" } }), sloppy, "simulation"),
+];
+const experiment = await runExperiment("adders", variants, distribution, scenarios,
+  { repetitions: 2, rulers: [...DEFAULT_RULERS, rate("tokens")], baseline: "add" });
+console.log(experiment.table());
 
-# Attach raters after the fact and measure whether they agree.
-judged = rate_trials(experiment.measurement, "grader", lambda t, trial: trial.grades.outcome.correct)
-judged = rate_trials(judged, "llm_judge", my_llm_judge)      # your callable: (trajectory, trial) -> verdict
-reliability = evaluate("judged adders", judged, baseline="add",
-                       rulers=(inter_rater_reliability(["grader", "llm_judge"]), agreement_with_grader("llm_judge")))
-print(reliability.table())
+// Attach raters after the fact and measure whether they agree.
+let judged = await rateTrials(experiment.measurement, "grader", (_s, trial) => trial.grades.outcome.correct);
+judged = await rateTrials(judged, "llm_judge", myLlmJudge);      // your (scenario, trial) => verdict, may be async
+const reliability = evaluate("judged adders", judged,
+  [interRaterReliability(["grader", "llm_judge"]), agreementWithGrader("llm_judge")], { baseline: "add" });
+console.log(reliability.table());
 ```
 
 ```text
-| Function                  | accuracy             | field_f1             | pass^k               | path_consistency     | cost | latency_ms           | steps                | tokens               |
+| Function                  | accuracy             | fieldF1              | pass^k               | path_consistency     | cost | latencyMs            | steps                | tokens               |
 |---|---|---|---|---|---|---|---|---|
-| add                       | 1.000 [0.541, 1.000] | 1.000 [0.541, 1.000] | 1.000 [0.541, 1.000] | 1.000 [0.541, 1.000] | n/a  | 0.001 [0.000, 0.002] | 0.167 [0.031, 0.302] | 0.000 [0.000, 0.000] |
-| sloppy                    | 0.875 [0.696, 1.000] | 0.875 [0.696, 1.000] | 0.875 [0.696, 1.000] | 1.000 [0.541, 1.000] | n/a  | 0.001 [0.000, 0.002] | 0.167 [0.031, 0.302] | 0.000 [0.000, 0.000] |
+| add                       | 1.000 [0.541, 1.000] | 1.000 [0.541, 1.000] | 1.000 [0.541, 1.000] | 1.000 [0.541, 1.000] | n/a  | 0.000 [0.000, 0.001] | 0.167 [0.031, 0.302] | 0.000 [0.000, 0.000] |
+| sloppy                    | 0.875 [0.696, 1.000] | 0.875 [0.696, 1.000] | 0.875 [0.696, 1.000] | 1.000 [0.541, 1.000] | n/a  | 0.000 [0.000, 0.001] | 0.167 [0.031, 0.302] | 0.000 [0.000, 0.000] |
 | never_escalate (control)  | 0.000 [0.000, 0.459] | 0.167 [0.031, 0.302] | 0.000 [0.000, 0.459] | 1.000 [0.541, 1.000] | n/a  | 0.000 [0.000, 0.000] | 0.000 [0.000, 0.000] | 0.000 [0.000, 0.000] |
-| always_escalate (control) | 0.167 [0.031, 0.302] | 0.167 [0.031, 0.302] | 0.167 [0.031, 0.302] | 1.000 [0.541, 1.000] | n/a  | 0.008 [0.008, 0.009] | 1.000 [1.000, 1.000] | 0.000 [0.000, 0.000] |
+| always_escalate (control) | 0.167 [0.031, 0.302] | 0.167 [0.031, 0.302] | 0.167 [0.031, 0.302] | 1.000 [0.541, 1.000] | n/a  | 0.004 [0.002, 0.006] | 1.000 [1.000, 1.000] | 0.000 [0.000, 0.000] |
 ```
 
 ## Reading it
 
 - `cost` is `n/a` because no trial recorded monetary usage. Signal never fills that with zero.
 - Intervals are wide because six batches are the independent unit. Repetitions measure stability, not sample size.
-- `experiment.comparisons["sloppy"]` holds the paired advantage of `sloppy` over the baseline for every ruler that has a metric, with a cluster-bootstrap interval.
-- `experiment.markdown()` gives the whole report; `experiment.to_dict()` is JSON-ready.
+- `experiment.comparisons.sloppy` holds the paired advantage of `sloppy` over the baseline for every ruler that has a metric, with a cluster-bootstrap interval.
+- `experiment.markdown()` gives the whole report; `experiment.toJSON()` is JSON-ready.
 
 ## Judges are raters, not graders
 
-`rate_trials()` attaches a verdict per trial under a rater name. The deterministic grader is one rater; a human panel or a language-model judge run over the transcripts is another. `inter_rater_reliability()` (Krippendorff's alpha) and `agreement_with_grader()` tell you whether the judge measures the same thing. Until the alpha is high, the judge is not a ruler.
+`rateTrials()` attaches a verdict per trial under a rater name. The deterministic grader is one rater; a human panel or a language-model judge run over the transcripts is another. `interRaterReliability()` (Krippendorff's alpha) and `agreementWithGrader()` tell you whether the judge measures the same thing. Until the alpha is high, the judge is not a ruler.
 
 ## When to predeclare
 
-If a comparison will decide something (ship / don't ship, "not worse than"), declare it in `MeasurementConfig.confirmatory_comparisons` with a margin before running. See [Comparisons and power](#/comparisons).
+If a comparison will decide something (ship / don't ship, "not worse than"), declare it in `MeasurementConfig.confirmatoryComparisons` with a margin before running. See [Comparisons and power](#/comparisons).

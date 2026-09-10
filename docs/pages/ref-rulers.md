@@ -2,70 +2,66 @@
 title: Rulers
 slug: rulers-reference
 group: SDK reference
-summary: Ruler, the built-in constructors and apply_rulers().
+summary: Ruler, the built-in constructors and applyRulers().
 ---
 
-```python
-from signal_sdk import (Ruler, rate, accuracy, pass_power_k, path_consistency,
-                        inter_rater_reliability, agreement_with_grader, apply_rulers, DEFAULT_RULERS)
+```ts
+import { DEFAULT_RULERS, Ruler, accuracy, agreementWithGrader, applyRulers, interRaterReliability, krippendorffAlpha,
+         passPowerK, pathConsistency, rate } from "signal-sdk";
 
-Ruler(name: str, measure: Callable[[Rows, int, int], dict], description: str = "",
-      metric: str | None = None, higher_is_better: bool | None = None)
-ruler(rows, *, bootstrap_samples=2000, seed=0) -> dict
+new Ruler(name: string, measure: (rows: Row[], bootstrapSamples: number, seed: number) => RulerResult,
+          options?: { description?: string; metric?: string | null; higherIsBetter?: boolean | null })
+ruler.apply(rows, { bootstrapSamples?, seed? }): RulerResult
 
-rate(metric: str, *, name=None, higher_is_better=None, description="") -> Ruler
-accuracy() -> Ruler
-pass_power_k() -> Ruler
-path_consistency() -> Ruler
-inter_rater_reliability(raters: Sequence[str]) -> Ruler
-agreement_with_grader(rater: str) -> Ruler
-apply_rulers(rows, rulers, *, function_id: str, bootstrap_samples=2000, seed=0) -> dict[str, dict]
+rate(metric: string, options?: { name?: string; higherIsBetter?: boolean | null; description?: string }): Ruler
+accuracy(): Ruler
+passPowerK(): Ruler
+pathConsistency(): Ruler
+interRaterReliability(raters: string[]): Ruler
+agreementWithGrader(rater: string): Ruler
+applyRulers(rows, rulers, { functionId, bootstrapSamples?, seed? }): Record<string, RulerResult>
+krippendorffAlpha(units: string[][]): number | null
 ```
 
 ## Example
 
-```python
-from signal_sdk import apply_rulers, accuracy, rate, inter_rater_reliability
-from signal_sdk.runner import observation_rows
+```ts
+import { accuracy, applyRulers, interRaterReliability, observationRows, rate } from "signal-sdk";
 
-rows = observation_rows(measurement)
-results = apply_rulers(rows, (accuracy(), rate("attempts:wrong_account"), inter_rater_reliability(["grader", "judge"])),
-                       function_id=function.id, bootstrap_samples=1000, seed=3)
-print(results["accuracy"])
+const rows = observationRows(measurement);
+const results = applyRulers(rows, [accuracy(), rate("attempts:wrong_account"), interRaterReliability(["grader", "judge"])],
+  { functionId: fn.id, bootstrapSamples: 1000, seed: 3 });
+console.log(results.accuracy);
 ```
 
 ```json
-{"estimate": 1.0, "interval": [0.7248, 1.0], "confidence": 0.95, "trajectories": 24, "clusters": 16,
- "method": "top_cluster_bootstrap+cluster_t_envelope; bounded_degenerate_sample_guard",
- "zero_event_note": null, "missing_trajectories": 0, "ruler": "accuracy"}
+{"estimate": 1, "interval": [0.7248, 1], "confidence": 0.95, "scenarios": 24, "clusters": 16,
+ "method": "top_cluster_percentile_bootstrap_with_cluster_t_envelope; bounded_degenerate_sample_guard",
+ "zeroEventNote": null, "missingScenarios": 0, "ruler": "accuracy"}
 ```
 
 ## Ruler
 
-| Field | Meaning |
+| Member | Meaning |
 |---|---|
 | `name` | Column header in experiment tables; key in `results`. |
-| `measure(rows, bootstrap_samples, seed)` | Rows for one function → `{"estimate", "interval", ...}`. |
+| `measure(rows, bootstrapSamples, seed)` | Rows for one function → `{ estimate, interval, ... }`. |
 | `metric` | Set when the ruler is a plain row metric; enables paired comparisons in experiments. |
-| `higher_is_better` | Direction for paired advantages. `None` when there is no natural direction. |
+| `higherIsBetter` | Direction for paired advantages. `null` when there is no natural direction. |
 
 ## Constructors
 
 | Constructor | Metric | Interval |
 |---|---|---|
-| `rate(metric)` | `correct`, `field_f1`, `schema_valid`, `cost`, `latency_ms`, `tokens`, `steps`, `retries`, `attempts:<harm>`, `occurrences:<harm>`, `loss:<harm>`, `metric:<name>` | Top-cluster bootstrap with cluster-t envelope; bounded to [0, 1] for rates. |
+| `rate(metric)` | `correct`, `fieldF1`, `schemaValid`, `cost`, `latencyMs`, `tokens`, `steps`, `retries`, `attempts:<harm>`, `occurrences:<harm>`, `loss:<harm>`, `metric:<name>` | Top-cluster bootstrap with cluster-t envelope; bounded to [0, 1] for rates. |
 | `accuracy()` | `correct` | Same. |
-| `pass_power_k()` | all repetitions correct | Same, per trajectory. |
-| `path_consistency()` | identical `path_signature` across repetitions | Same. |
-| `inter_rater_reliability(raters)` | nominal Krippendorff's alpha over `ratings` | Percentile cluster bootstrap in [−1, 1]. |
-| `agreement_with_grader(rater)` | rater verdict (truthy) == `correct` | Per trajectory, cluster interval. |
+| `passPowerK()` | all repetitions correct | Same, per scenario. |
+| `pathConsistency()` | identical `pathSignature` across repetitions | Same. |
+| `interRaterReliability(raters)` | nominal Krippendorff's alpha over `ratings` | Percentile cluster bootstrap in [−1, 1]. |
+| `agreementWithGrader(rater)` | rater verdict (truthy) === `correct` | Per scenario, cluster interval. |
 
-`DEFAULT_RULERS = (accuracy(), rate("field_f1"), pass_power_k(), path_consistency(), rate("cost"), rate("latency_ms"), rate("steps"))`.
+`DEFAULT_RULERS = [accuracy(), rate("fieldF1"), passPowerK(), pathConsistency(), rate("cost"), rate("latencyMs"), rate("steps")]`.
 
 ## Rows
 
-`observation_rows(measurement, include_variants=False)` produces one dictionary per trial: `trajectory_id`, `function_id`, `repetition`, `seed`, `cluster`, `label`, `correct`, `field_f1`, `required_escalation_met`, `ratings`, `schema_valid`, `steps`, `retries`, `tokens`, `cost`, `latency_ms`, `path_signature`, `attempted`, `occurred`, `severity`, `metric:<name>`, `risk_signal`, `variant_of`, `outcome_signature`, `tool_fault`, `execution_error`.
-
-## Notes
-
-`krippendorff_alpha(units)` in `signal_sdk.rulers` computes the statistic directly from a list of per-unit rating lists and returns `None` when it is undefined.
+`observationRows(measurement, { includeVariants? })` produces one `Row` per trial: `scenarioId`, `functionId`, `repetition`, `seed`, `cluster`, `label`, `correct`, `fieldF1`, `requiredEscalationMet`, `ratings`, `schemaValid`, `steps`, `retries`, `tokens`, `cost`, `latencyMs`, `pathSignature`, `attempted`, `occurred`, `severity`, `metrics`, `riskSignal`, `variantOf`, `groundStateHash`, `outcomeSignature`, `toolFault`, `executionError`.

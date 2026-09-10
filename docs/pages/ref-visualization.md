@@ -1,55 +1,52 @@
 ---
 title: Traces and dashboard
 group: SDK reference
-summary: export_html(), render_terminal(), DashboardStore and create_app().
+summary: exportHtml(), renderTerminal(), DashboardStore and createApp().
 ---
 
-```python
-from signal_sdk.visualization import html_document, export_html, render_terminal, build_flamegraph_data
-from signal_sdk.dashboard.store import DashboardStore
-from signal_sdk.dashboard.app import create_app
+```ts
+import { buildFlamegraphData, exportHtml, htmlDocument, renderTerminal } from "signal-sdk/visualization";
+import { DashboardStore, createApp } from "signal-sdk/dashboard";
 
-html_document(measurement: Measurement) -> str
-export_html(measurement: Measurement, path: str | Path) -> Path
-render_terminal(measurement: Measurement, console=None) -> None
-build_flamegraph_data(measurement: Measurement) -> tuple[FlameGraphData, ...]
+htmlDocument(measurement: Measurement): string
+exportHtml(measurement: Measurement, path: string): string
+renderTerminal(measurement: Measurement, write?: (line: string) => void): void
+buildFlamegraphData(measurement: Measurement): FlameGraphData[]
 
-DashboardStore(data_dir: str | Path | None = None)
-    .put(measurement) -> str
-    .get(measurement_id) -> Measurement | None
-    .list(limit=100, function_id=None) -> list[Measurement]
-    .put_certificate(measurement_id, payload: dict) -> None
-    .get_certificate(measurement_id) -> dict | None
+new DashboardStore(dataDir: string | null = null)
+  .put(measurement): string
+  .get(measurementId): Measurement | null
+  .list(limit = 100, functionId: string | null = null): Measurement[]
+  .putCertificate(measurementId, payload: object): void
+  .getCertificate(measurementId): JsonObject | null
 
-create_app(data_dir: str | Path | None = None) -> FastAPI
+createApp(dataDir: string | null = null): { store, handle(req, res), listen(port = 8080, host = "127.0.0.1"): Promise<http.Server> }
 ```
 
 ## Example
 
-```python
-from signal_sdk.visualization import export_html
-from signal_sdk.dashboard.store import DashboardStore
-from signal_sdk.dashboard.app import create_app
-import uvicorn
+```ts
+import { exportHtml } from "signal-sdk/visualization";
+import { DashboardStore, createApp } from "signal-sdk/dashboard";
 
-export_html(measurement, "outputs/traces.html")
-store = DashboardStore("outputs/store")
-store.put(measurement)
-uvicorn.run(create_app("outputs/store"), host="127.0.0.1", port=8080)
+exportHtml(measurement, "outputs/traces.html");
+new DashboardStore("outputs/store").put(measurement);
+const server = await createApp("outputs/store").listen(8080);
+console.log("http://127.0.0.1:8080/docs");
 ```
 
 ```sh
-curl -s localhost:8080/api/measurements | jq '.[0] | {id, functions, trials}'
+curl -s localhost:8080/api/measurements | jq '.[0] | {id, functionIds, trials}'
 open http://127.0.0.1:8080/measurements/<measurement-id>
 ```
 
 ## Trace explorer
 
-One section per trajectory × function with a step-position table (which tool names appear at each position across repetitions, presence, mean latency, mean tokens) and one expandable trial per repetition: outcome, process, events table, goal tree with arguments and results, messages. Everything from transcripts is HTML-escaped.
+One section per scenario × function with a step-position table (which tool names appear at each position across repetitions, presence, mean latency, mean tokens) and one expandable trial per repetition: outcome, process, events table, goal tree with arguments and results, messages. Everything from transcripts is HTML-escaped.
 
 ## Store
 
-Files are `<id>.measurement.json` and `<id>.certificate.json`. Writes are create-only; an identical rewrite is accepted, a conflicting one raises `ImmutableConflict`. Reads recompute the content hash and raise on tampering. IDs are validated against path traversal.
+Files are `<id>.measurement.json` and `<id>.certificate.json`. Writes are create-only (an atomic hard-link publish); an identical rewrite is accepted, a conflicting one throws `ImmutableConflict`. Reads recompute the content hash and throw on tampering. IDs are validated against path traversal. Without a `dataDir` the store is in-memory.
 
 ## API
 
@@ -58,10 +55,10 @@ Files are `<id>.measurement.json` and `<id>.certificate.json`. Writes are create
 | GET | `/health` |
 | POST, GET | `/api/measurements` |
 | GET | `/api/measurements/{id}` |
-| GET | `/api/measurements/{id}/trials?trajectory_id=&function_id=` |
+| GET | `/api/measurements/{id}/trials?scenarioId=&functionId=` |
 | GET | `/api/measurements/{id}/trials/{index}` |
 | POST, GET | `/api/measurements/{id}/certificate` |
 | GET | `/measurements/{id}` (HTML) |
 | GET | `/docs` |
 
-Install the `dashboard` extra. There is no authentication; the API is local infrastructure.
+Node's `http` module only, no framework, no authentication; the API is local infrastructure.

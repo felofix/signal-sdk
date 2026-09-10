@@ -1,41 +1,45 @@
 ---
-title: rate_trials()
+title: rateTrials()
 group: SDK reference
 summary: Attach a rater's verdict to every trial and get a new snapshot.
 ---
 
-```python
-from signal_sdk import rate_trials
+```ts
+import { rateTrials } from "signal-sdk";
 
-rate_trials(measurement: Measurement, rater: str,
-            judge: Callable[[Trajectory, Trial], Any]) -> Measurement
+rateTrials(
+  measurement: Measurement,
+  rater: string,
+  judge: (scenario: Scenario, trial: Trial) => unknown | Promise<unknown>,
+): Promise<Measurement>
 ```
 
-This is how a human panel or a language-model judge enters an experiment: after the fact, over recorded transcripts, as a rating held alongside the deterministic grades. Rulers such as `inter_rater_reliability()` and `agreement_with_grader()` then measure whether the rater agrees with anyone.
+This is how a human panel or a language-model judge enters an experiment: after the fact, over recorded transcripts, as a rating held alongside the deterministic grades. Rulers such as `interRaterReliability()` and `agreementWithGrader()` then measure whether the rater agrees with anyone.
 
 ## Example
 
-```python
-from signal_sdk import rate_trials, evaluate, inter_rater_reliability, agreement_with_grader
+```ts
+import { agreementWithGrader, evaluate, interRaterReliability, rateTrials } from "signal-sdk";
 
-def llm_judge(trajectory, trial):
-    verdict = client.responses.create(model=JUDGE, input=[
-        {"role": "system", "content": "Answer PASS or FAIL."},
-        {"role": "user", "content": f"Task: {trajectory.input}\nTranscript: {trial.transcript.model_dump_json()}\n"
-                                    f"Outcome: {trial.outcome.model_dump_json()}"},
-    ]).output_text.strip()
-    return verdict == "PASS"
+async function llmJudge(scenario: Scenario, trial: Trial): Promise<boolean> {
+  const response = await client.messages.create({
+    model: JUDGE, max_tokens: 5,
+    system: "Answer PASS or FAIL.",
+    messages: [{ role: "user", content: `Task: ${JSON.stringify(scenario.input)}\nTranscript: ${JSON.stringify(trial.transcript)}\nOutcome: ${JSON.stringify(trial.outcome)}` }],
+  });
+  return response.content[0].text.trim() === "PASS";
+}
 
-judged = rate_trials(measurement, "grader", lambda t, trial: trial.grades.outcome.correct)
-judged = rate_trials(judged, "gpt-judge", llm_judge)
-judged = rate_trials(judged, "human", lambda t, trial: human_labels[(t.id, trial.function_id, trial.repetition)])
+let judged = await rateTrials(measurement, "grader", (_s, trial) => trial.grades.outcome.correct);
+judged = await rateTrials(judged, "llm-judge", llmJudge);
+judged = await rateTrials(judged, "human", (s, trial) => humanLabels.get(`${s.id}:${trial.functionId}:${trial.repetition}`));
 
-report = evaluate("judge reliability", judged, rulers=(
-    inter_rater_reliability(["grader", "gpt-judge", "human"]),
-    inter_rater_reliability(["human", "gpt-judge"]),
-    agreement_with_grader("gpt-judge"),
-))
-print(report.table())
+const report = evaluate("judge reliability", judged, [
+  interRaterReliability(["grader", "llm-judge", "human"]),
+  interRaterReliability(["human", "llm-judge"]),
+  agreementWithGrader("llm-judge"),
+]);
+console.log(report.table());
 ```
 
 ## Parameters
@@ -43,12 +47,12 @@ print(report.table())
 | Name | Type | | |
 |---|---|---|---|
 | `measurement` | `Measurement` | required | The snapshot to annotate. |
-| `rater` | `str` | required | Rater name; becomes the key in `Grades.ratings`. |
-| `judge` | `Callable[[Trajectory, Trial], Any]` | required | Returns a categorical verdict. Booleans are read as correct/incorrect by `agreement_with_grader()`. |
+| `rater` | `string` | required | Rater name; becomes the key in `Grades.ratings`. |
+| `judge` | `(scenario, trial) => verdict` | required | Sync or async. Returns a categorical verdict; booleans are read as correct/incorrect by `agreementWithGrader()`. |
 
 ## Returns
 
-A new `Measurement` with `ratings[rater]` set on every trial. Its `id` changes because content changed; `validation`, functions and trajectories are untouched.
+A promise of a new `Measurement` with `ratings[rater]` set on every trial. Its `id` changes because content changed; `validation`, functions and scenarios are untouched.
 
 ## Notes
 

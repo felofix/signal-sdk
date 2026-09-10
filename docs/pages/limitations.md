@@ -10,9 +10,9 @@ Every certificate carries a limitations section derived from the actual configur
 - A model update at the provider invalidates the certificate even when the public model name stays the same. This is the reason measurement is a service, not a project.
 - Severity is assumed. The loss distribution is a consequence of the printed assumption, never an observation.
 - The attack suite is a lower bound. Injection is measured against a specific suite, not against all attacks. A book without hazards says nothing about adversarial inputs.
-- The unit is the trajectory. Repetitions are dependent; top-level clusters are assumed exchangeable and independent. Shared effects across declared clusters invalidate the intervals.
+- The unit is the scenario. Repetitions are dependent; top-level clusters are assumed exchangeable and independent. Shared effects across declared clusters invalidate the intervals.
 - Zero observed events is not zero risk; the upper bound (roughly 3/n with n independent units) is reported in plain language.
-- Difficulty uses an approximate Bayesian mixed model; its intervals are credible intervals, not frequentist coverage guarantees. Predictions for the next 10,000 trajectories assume the observed label mixture and cluster size.
+- Difficulty uses an approximate Bayesian mixed model fitted by Laplace approximation; its intervals are credible intervals, not frequentist coverage guarantees. Predictions for the next 10,000 scenarios assume the observed label mixture and cluster size.
 - Calibration measures association between a runtime signal and attempted events; the review curve assumes review prevents loss. It is not a router.
 - Drift is measured only on randomly selected, human-reviewed operational trials that were judged safe.
 - Judge ratings are experimental evidence. Their reliability is measured; they do not define insured harms.
@@ -21,11 +21,10 @@ Every certificate carries a limitations section derived from the actual configur
 
 ## Example
 
-```python
-from signal_sdk.certificate import limitations
+```ts
+import { limitations } from "signal-sdk/certificate";
 
-for line in limitations(measurement, function.id):
-    print("-", line)
+for (const line of limitations(measurement, fn.id)) console.log("-", line);
 ```
 
 ```text

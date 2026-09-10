@@ -167,9 +167,9 @@ footer a { color: var(--ink-80); }
   <line x1="41.7" y1="38.0" x2="54.0" y2="46.6"/><line x1="37.2" y1="40.9" x2="39.8" y2="55.7"/><line x1="32.0" y1="39.7" x2="23.4" y2="52.0"/><line x1="29.1" y1="35.2" x2="14.3" y2="37.8"/><line x1="30.3" y1="30.0" x2="18.0" y2="21.4"/><line x1="34.8" y1="27.1" x2="32.2" y2="12.3"/><line x1="40.0" y1="28.3" x2="48.6" y2="16.0"/><line x1="42.9" y1="32.8" x2="57.7" y2="30.2"/><line x1="131.0" y1="100.5" x2="143.3" y2="109.1"/><line x1="126.5" y1="103.4" x2="129.1" y2="118.2"/><line x1="121.3" y1="102.2" x2="112.7" y2="114.5"/><line x1="118.4" y1="97.7" x2="103.6" y2="100.3"/><line x1="119.6" y1="92.5" x2="107.3" y2="83.9"/><line x1="124.1" y1="89.6" x2="121.5" y2="74.8"/><line x1="129.3" y1="90.8" x2="137.9" y2="78.5"/><line x1="132.2" y1="95.3" x2="147.0" y2="92.7"/><line x1="57.3" y1="48.9" x2="64.7" y2="54.1"/><line x1="77.0" y1="62.7" x2="84.3" y2="67.8"/><line x1="96.6" y1="76.4" x2="104.0" y2="81.6"/>
 </svg></div></div>
     <div class="hero-copy">
-      <p class="eyebrow">Signal SDK · 0.3.0</p>
+      <p class="eyebrow">Signal SDK · 0.4.0</p>
       <h1>A measuring instrument for agent systems.</h1>
-      <p class="lede">Run a precisely identified function against a constructed book of trajectories, grade every trial deterministically, and report three columns that are never summed into one number: outcome, events, process.</p>
+      <p class="lede">Run a precisely identified function against a constructed book of scenarios, grade every trial deterministically, and report three columns that are never summed into one number: outcome, events, process.</p>
       <div class="actions">
         <a class="btn btn-solid" href="#example">See the example</a>
         <a class="btn btn-soft" href="https://github.com/felofix/signal-sdk">Repository</a>
@@ -191,8 +191,8 @@ footer a { color: var(--ink-80); }
       </div>
       <div class="concept">
         <p class="eyebrow">Unit of statistics</p>
-        <h3>Trajectory</h3>
-        <p>One constructed task with a label fixed before any function runs: easy, complex, or impossible. Every function sees the same trajectories with the same seeds, so comparisons are paired and clustered.</p>
+        <h3>Scenario</h3>
+        <p>One constructed task with a label fixed before any function runs: easy, complex, or impossible. Every function sees the same scenarios with the same seeds, so comparisons are paired and clustered.</p>
       </div>
     </div>
   </section>
@@ -206,39 +206,36 @@ footer a { color: var(--ink-80); }
       </div>
     </div>
     <div class="split">
-      <pre class="code"><code><span class="c"># the book: any JSON input, a written label rule, ground truth</span>
-<span class="k">from</span> signal_sdk <span class="k">import</span> (Trajectory, Function, FunctionImplementation, Label,
-                        MeasurementConfig, dataset_distribution, measure)
+      <pre class="code"><code><span class="c">// the book: any JSON input, a written label rule, a ground state</span>
+<span class="k">import</span> { Function, FunctionImplementation, MeasurementConfig, Scenario,
+         datasetDistribution, measure } <span class="k">from</span> <span class="s">"signal-sdk"</span>;
 
-trajectories = (
-    Trajectory(id=<span class="s">"sum-0000"</span>, input={<span class="s">"task"</span>: <span class="s">"What is 42 + 20?"</span>}, label=Label.EASY,
-            ground_truth={<span class="s">"value"</span>: 62}, cluster=<span class="s">"batch-00"</span>),
-    Trajectory(id=<span class="s">"sum-0005"</span>, input={<span class="s">"task"</span>: <span class="s">"What is 17 + ?"</span>}, label=Label.IMPOSSIBLE,
-            ground_truth={<span class="s">"value"</span>: <span class="k">None</span>, <span class="s">"escalated"</span>: <span class="k">True</span>}, cluster=<span class="s">"batch-01"</span>),
-    <span class="c"># ... 22 more, 6 batches</span>
-)
-distribution = dataset_distribution(<span class="s">"Arithmetic book"</span>, trajectories, top_cluster=<span class="s">"batch"</span>,
-    label_rule=<span class="s">"impossible if an operand is missing; otherwise easy"</span>)
+<span class="k">const</span> book = [
+  <span class="k">new</span> Scenario({ id: <span class="s">"sum-0000"</span>, input: { task: <span class="s">"What is 5 + 17?"</span> }, label: <span class="s">"easy"</span>,
+                 groundState: { value: 22 }, cluster: <span class="s">"batch-00"</span> }),
+  <span class="k">new</span> Scenario({ id: <span class="s">"sum-0005"</span>, input: { task: <span class="s">"What is 17 + ?"</span> }, label: <span class="s">"impossible"</span>,
+                 groundState: { value: <span class="k">null</span>, escalated: <span class="k">true</span> }, cluster: <span class="s">"batch-01"</span> }),
+  <span class="c">// ... 22 more, 6 batches</span>
+];
+<span class="k">const</span> distribution = datasetDistribution(<span class="s">"Arithmetic book"</span>, book, { topCluster: <span class="s">"batch"</span>,
+  labelRule: <span class="s">"impossible if an operand is missing; otherwise easy"</span> });
 
-<span class="c"># the function: what it is, not what it can touch</span>
-<span class="k">def</span> <span class="f">add</span>(context):
-    task = context.input[<span class="s">"task"</span>]
-    <span class="k">if</span> <span class="s">"+ ?"</span> <span class="k">in</span> task:
-        context.tools.escalate(reason=<span class="s">"Missing operand"</span>)
-        <span class="k">return</span> <span class="k">None</span>
-    a, b = task.removeprefix(<span class="s">"What is "</span>).rstrip(<span class="s">"?"</span>).split(<span class="s">" + "</span>)
-    <span class="k">return</span> int(a) + int(b)
+<span class="c">// the function: what it is, not what it can touch</span>
+<span class="k">function</span> <span class="f">add</span>(context: TrialContext&lt;ReturnValueEnvironment&gt;): number | <span class="k">null</span> {
+  <span class="k">const</span> task = (context.input <span class="k">as</span> { task: string }).task;
+  <span class="k">if</span> (task.includes(<span class="s">"+ ?"</span>)) { context.tools.escalate(<span class="s">"Missing operand"</span>); <span class="k">return</span> <span class="k">null</span>; }
+  <span class="k">const</span> [a, b] = task.replace(<span class="s">"What is "</span>, <span class="s">""</span>).replace(<span class="s">"?"</span>, <span class="s">""</span>).split(<span class="s">" + "</span>);
+  <span class="k">return</span> Number(a) + Number(b);
+}
+<span class="k">const</span> fn = <span class="k">new</span> Function({ name: <span class="s">"add"</span>,
+  implementation: { module: <span class="s">"signal-sdk/examples"</span>, callable: <span class="s">"add"</span>, revision: <span class="s">"1"</span> } });
 
-function = Function(name=<span class="s">"add"</span>,
-    implementation={<span class="s">"module"</span>: <span class="s">"signal_sdk.examples"</span>, <span class="s">"callable"</span>: <span class="s">"add"</span>, <span class="s">"revision"</span>: <span class="s">"1"</span>})
-
-<span class="c"># the measurement: 3 repetitions, two trivial controls added for you</span>
-measurement = measure((FunctionImplementation(function, add, kind=<span class="s">"simulation"</span>),),
-                      distribution, trajectories,
-                      config=MeasurementConfig(mode=<span class="s">"simulation"</span>, repetitions=3, seed=7))</code></pre>
+<span class="c">// the measurement: 3 repetitions, two trivial controls added for you</span>
+<span class="k">const</span> measurement = <span class="k">await</span> measure([<span class="k">new</span> FunctionImplementation(fn, add, <span class="s">"simulation"</span>)],
+  distribution, book, { config: <span class="k">new</span> MeasurementConfig({ mode: <span class="s">"simulation"</span>, repetitions: 3, seed: 7 }) });</code></pre>
       <div class="steps">
         <div class="step"><span class="n">1</span><div><h3>The gate runs first</h3><p>Before a single trial, eight seeded simulation checks must pass: interval coverage, rejection of a planted worse function, zero-events-is-not-zero-risk, planted difficulty recovered, controls separated. The evidence is bound into the snapshot.</p></div></div>
-        <div class="step"><span class="n">2</span><div><h3>Three functions cross 24 trajectories, 3 times</h3><p><code>add</code>, <code>never_escalate</code> and <code>always_escalate</code> each see the same 24 inputs with the same seeds: 216 trials. Repetitions measure stability; they never count as extra trajectories.</p></div></div>
+        <div class="step"><span class="n">2</span><div><h3>Three functions cross 24 scenarios, 3 times</h3><p><code>add</code>, <code>never_escalate</code> and <code>always_escalate</code> each see the same 24 inputs with the same seeds: 216 trials. Repetitions measure stability; they never count as extra scenarios.</p></div></div>
         <div class="step"><span class="n">3</span><div><h3>Outcome is what came back, not what was said</h3><p>The default domain's outcome <em>is</em> the return value. In tool-using domains the environment records what actually happened; a function that says it paid without paying is graded on the ledger.</p></div></div>
         <div class="step"><span class="n">4</span><div><h3>One immutable snapshot, one certificate per function</h3><p>The measurement is content-addressed. Certificates carry the identity hashes, the three columns, difficulty, consistency, loss assumptions, and a limitations section generated from the configuration.</p></div></div>
       </div>
@@ -250,7 +247,7 @@ measurement = measure((FunctionImplementation(function, add, kind=<span class="s
       <div>
         <p class="eyebrow">What came out</p>
         <h2>Correct final state, per function, with 95% cluster intervals.</h2>
-        <p>Six batches are the independent unit, so the intervals are wide on purpose. Twenty-four perfect trajectories do not make a perfect function; they make a lower bound of 0.54.</p>
+        <p>Six batches are the independent unit, so the intervals are wide on purpose. Twenty-four perfect scenarios do not make a perfect function; they make a lower bound of 0.54.</p>
       </div>
     </div>
     <svg class="chart" viewBox="0 0 900 190" role="img" aria-label="Correct-rate estimates with 95% intervals for add, never_escalate and always_escalate">
@@ -258,7 +255,7 @@ measurement = measure((FunctionImplementation(function, add, kind=<span class="s
         <line x1="260" y1="20" x2="260" y2="140"/><line x1="405" y1="20" x2="405" y2="140"/><line x1="550" y1="20" x2="550" y2="140"/><line x1="695" y1="20" x2="695" y2="140"/><line x1="840" y1="20" x2="840" y2="140"/>
       </g>
       <g class="tick" text-anchor="middle"><text x="260" y="162">0</text><text x="405" y="162">0.25</text><text x="550" y="162">0.50</text><text x="695" y="162">0.75</text><text x="840" y="162">1.00</text></g>
-      <text x="550" y="184" class="tick" text-anchor="middle">Correct final state, trajectory-weighted, 24 trajectories in 6 clusters</text>
+      <text x="550" y="184" class="tick" text-anchor="middle">Correct final state, scenario-weighted, 24 scenarios in 6 clusters</text>
       <!-- add: 1.000 [0.541, 1.000] -->
       <text x="20" y="46" class="lab">add</text><text x="20" y="62" class="mono">1.000 [0.541, 1.000]</text>
       <line class="ci" x1="573.8" y1="42" x2="840" y2="42"/><circle class="pt" cx="840" cy="42" r="5"/>
@@ -274,14 +271,14 @@ measurement = measure((FunctionImplementation(function, add, kind=<span class="s
     <div class="report" style="margin-top:2rem">
       <div class="report-head">
         <h3>Risk certificate · add</h3>
-        <span class="hash">function 7681ac0f4231… · measurement fcd296617f71…</span>
+        <span class="hash">function d9a5f4b4b5f6… · measurement 03de7442ffdf…</span>
       </div>
       <div class="columns3">
         <div class="col">
           <p class="eyebrow">Outcome</p>
           <dl>
             <dt>Correct final state</dt><dd class="num">1.000</dd><dd class="ci">[0.541, 1.000]</dd>
-            <dt>Escalated when impossible</dt><dd class="num">1.000</dd><dd class="ci">[0.398, 1.000] · 4 trajectories</dd>
+            <dt>Escalated when impossible</dt><dd class="num">1.000</dd><dd class="ci">[0.398, 1.000] · 4 scenarios</dd>
             <dt>Field-level F1</dt><dd class="num">1.000</dd><dd class="ci">[0.541, 1.000]</dd>
           </dl>
         </div>
@@ -302,7 +299,7 @@ measurement = measure((FunctionImplementation(function, add, kind=<span class="s
         </div>
       </div>
       <p class="note">Zero observed events is not zero risk. With six independent clusters the certificate prints the upper bound in plain language instead of a reassuring 0%.</p>
-      <p class="note">Difficulty model: label explains 34% of latent variance. Predicted correct rate on the next 10,000 trajectories 0.969 [0.875, 0.997], wider than the measured book's 0.972 [0.886, 0.997]. Prediction-width check: PASS.</p>
+      <p class="note">Difficulty model (Laplace-approximation logistic mixed model): label explains 29% of latent variance. Predicted correct rate on the next 10,000 scenarios 0.947 [0.845, 0.991], wider than the measured book's 0.957 [0.878, 0.991]. Prediction-width check: PASS.</p>
     </div>
   </section>
 
@@ -311,24 +308,25 @@ measurement = measure((FunctionImplementation(function, add, kind=<span class="s
       <div>
         <p class="eyebrow">Attempted vs. occurred</p>
         <h2>The same instrument on an agent that moves money.</h2>
-        <p>The optional payments domain adds tools, injected hazards and a mandate enforced in <code>pay()</code>. Here the <code>always_pay</code> control tried 33 payments the mandate did not allow. Frequency counts the attempts; loss counts what went through.</p>
+        <p>The optional payments domain adds tools, injected hazards and a mandate enforced in <code>pay()</code>. Here the <code>always_pay</code> control tried 36 payments the mandate did not allow. Frequency counts the attempts; loss counts what went through.</p>
       </div>
     </div>
     <div class="table-scroll">
       <table>
         <thead><tr><th>Harm class</th><th>Function</th><th class="num">Attempted trials</th><th class="num">Occurred trials</th><th>Attempt rate [95%]</th><th>Stopped by</th></tr></thead>
         <tbody>
-          <tr><td>Mandate breach</td><td>always_pay</td><td class="num">33</td><td class="num">0</td><td class="mono">0.458 [0.298, 0.619]</td><td><span class="pill stop">mandate</span></td></tr>
-          <tr><td>Duplicate payment</td><td>always_pay</td><td class="num">12</td><td class="num">0</td><td class="mono">0.167 [0.005, 0.333]</td><td><span class="pill stop">mandate</span></td></tr>
-          <tr><td>Amount discrepancy</td><td>always_pay</td><td class="num">12</td><td class="num">0</td><td class="mono">0.167 [0.023, 0.310]</td><td><span class="pill stop">mandate</span></td></tr>
-          <tr><td>Wrong account</td><td>always_pay</td><td class="num">9</td><td class="num">0</td><td class="mono">0.125 [0.000, 0.259]</td><td><span class="pill stop">mandate</span></td></tr>
-          <tr><td>Mishandled tool fault</td><td>always_pay</td><td class="num">3</td><td class="num">3</td><td class="mono">0.042 [0.000, 0.129]</td><td><span class="pill through">went through</span></td></tr>
-          <tr><td>Unnecessary escalation</td><td>always_escalate</td><td class="num">51</td><td class="num">51</td><td class="mono">0.708 [0.571, 0.850]</td><td><span class="pill through">went through</span></td></tr>
+          <tr><td>Mandate breach</td><td>always_pay</td><td class="num">36</td><td class="num">0</td><td class="mono">0.500 [0.295, 0.705]</td><td><span class="pill stop">mandate</span></td></tr>
+          <tr><td>Duplicate payment</td><td>always_pay</td><td class="num">15</td><td class="num">0</td><td class="mono">0.208 [0.029, 0.388]</td><td><span class="pill stop">mandate</span></td></tr>
+          <tr><td>Wrong account</td><td>always_pay</td><td class="num">12</td><td class="num">0</td><td class="mono">0.167 [0.014, 0.320]</td><td><span class="pill stop">mandate</span></td></tr>
+          <tr><td>Hallucinated action</td><td>always_pay</td><td class="num">12</td><td class="num">0</td><td class="mono">0.167 [0.014, 0.320]</td><td><span class="pill stop">mandate</span></td></tr>
+          <tr><td>Amount discrepancy</td><td>always_pay</td><td class="num">6</td><td class="num">0</td><td class="mono">0.083 [0.000, 0.206]</td><td><span class="pill stop">mandate</span></td></tr>
+          <tr><td>Mishandled tool fault</td><td>always_pay</td><td class="num">6</td><td class="num">6</td><td class="mono">0.083 [0.000, 0.200]</td><td><span class="pill through">went through</span></td></tr>
+          <tr><td>Unnecessary escalation</td><td>always_escalate</td><td class="num">48</td><td class="num">48</td><td class="mono">0.667 [0.446, 0.887]</td><td><span class="pill through">went through</span></td></tr>
           <tr><td>Any of the ten</td><td>reconcile</td><td class="num">0</td><td class="num">0</td><td class="mono">0.000 [0.000, 0.275]</td><td>—</td></tr>
         </tbody>
       </table>
     </div>
-    <p class="note" style="margin-top:1.25rem">24 invoices, 16 vendor clusters, 3 repetitions, 48 cosmetic variants for the robustness check: <code>reconcile</code> changed its outcome on 0 of 24 perturbed trajectories [0.000, 0.275]. Severity is assumed at 100 USD per occurrence and printed as an assumption; the loss distribution per 10,000 trajectories is simulated from it, not observed.</p>
+    <p class="note" style="margin-top:1.25rem">24 invoices, 16 vendor clusters, 3 repetitions, 48 cosmetic variants for the robustness check: <code>reconcile</code> changed its outcome on 0 of 24 perturbed scenarios [0.000, 0.275]. Severity is assumed at 100 USD per occurrence and printed as an assumption; the loss distribution per 10,000 scenarios is simulated from it, not observed.</p>
   </section>
 
   <section class="section wrap">
@@ -351,7 +349,7 @@ measurement = measure((FunctionImplementation(function, add, kind=<span class="s
 
 <footer>
   <div class="wrap">
-    <span>signal · Signal SDK 0.3.0 · numbers from <code>signal-sdk demo --generic --trajectories 24</code> and <code>signal-sdk demo --trajectories 24</code></span>
+    <span>signal · Signal SDK 0.4.0 · TypeScript, Node 20+ · numbers from <code>signal-sdk demo --generic --scenarios 24</code> and <code>signal-sdk demo --scenarios 24</code></span>
     <span><a href="https://github.com/felofix/signal-sdk">github.com/felofix/signal-sdk</a> · <a href="index.html">Docs</a> · <a href="index.html#/statistics">Statistics</a></span>
   </div>
 </footer>

@@ -4,35 +4,32 @@ group: Get started
 summary: What Signal measures, in one screen.
 ---
 
-Signal is a statistical measuring instrument for agent systems. You give it a **function** (the thing under test), a **book** of trajectories (constructed tasks with ground truth), and a **domain** (the external world: tools, enforcement, graders). It runs every function on every trajectory several times, grades each trial deterministically, and reads **rulers** off the results: accuracy with a 95% interval, pass^k, cost, harm rates, agreement between raters.
+Signal is a statistical measuring instrument for agent systems. You give it a **function** (the thing under test), a **book** of scenarios (constructed test examples with a ground state), and a **domain** (the external world: tools, enforcement, graders). It runs every function on every scenario several times, grades each trial deterministically, and reads **rulers** off the results: accuracy with a 95% interval, pass^k, cost, harm rates, agreement between raters.
 
-Nothing about a task domain lives in the core. Documents, payments, tool schemas and harm definitions are supplied by a `Domain`. The built-in one grades plain return values, so any Python callable is measurable in a few lines.
+Nothing about a task domain lives in the core. Documents, payments, tool schemas and harm definitions are supplied by a `Domain`. The built-in one grades plain return values, so any callable — sync or async — is measurable in a few lines. The whole SDK is TypeScript for Node 20+ with no runtime dependencies; the statistics are implemented and tested in-repo.
 
 ## Example
 
-```python
-from signal_sdk import Trajectory, Function, FunctionImplementation, dataset_distribution, run_experiment
+```ts
+import { Function, FunctionImplementation, Scenario, datasetDistribution, runExperiment } from "signal-sdk";
 
-book = tuple(
-    Trajectory(id=f"t{i}", input={"task": f"Uppercase: {w}"}, label="easy",
-               ground_truth={"value": w.upper()}, cluster=f"g{i // 3}")
-    for i, w in enumerate(["signal", "measure", "trajectory", "trial", "grader", "loss"])
-)
-distribution = dataset_distribution("Uppercase words", book, label_rule="all easy", top_cluster="group")
+const words = ["signal", "measure", "scenario", "trial", "grader", "loss"];
+const book = words.map((w, i) => new Scenario({
+  id: `t${i}`, input: { task: `Uppercase: ${w}` }, label: "easy",
+  groundState: { value: w.toUpperCase() }, cluster: `g${Math.floor(i / 3)}`,
+}));
+const distribution = datasetDistribution("Uppercase words", book, { labelRule: "all easy", topCluster: "group" });
 
-def upper(context):
-    return context.input["task"].removeprefix("Uppercase: ").upper()
+const upper = (context: { input: { task: string } }) => context.input.task.replace("Uppercase: ", "").toUpperCase();
 
-experiment = run_experiment(
-    "uppercase",
-    (FunctionImplementation(Function(name="upper", implementation={"revision": "1"}), upper, kind="simulation"),),
-    distribution, book, repetitions=2,
-)
-print(experiment.table())
+const experiment = await runExperiment("uppercase",
+  [new FunctionImplementation(new Function({ name: "upper", implementation: { revision: "1" } }), upper, "simulation")],
+  distribution, book, { repetitions: 2 });
+console.log(experiment.table());
 ```
 
 ```text
-| Function                  | accuracy             | field_f1             | pass^k               | ...
+| Function                  | accuracy             | fieldF1              | pass^k               | ...
 |---------------------------|----------------------|----------------------|----------------------|
 | upper                     | 1.000 [0.541, 1.000] | 1.000 [0.541, 1.000] | 1.000 [0.541, 1.000] |
 | never_escalate (control)  | 0.000 [0.000, 0.459] | 0.000 [0.000, 0.459] | 0.000 [0.000, 0.459] |
@@ -43,7 +40,7 @@ print(experiment.table())
 
 | Column | What it holds |
 |---|---|
-| **Outcome** | Correct final state against ground truth, field-level F1 as support, escalation when it was required. |
+| **Outcome** | Correct final state against the ground state, field-level F1 as support, escalation when it was required. |
 | **Events** | Per harm class: was it *attempted*, did it *occur*, and at what severity. A mandate can stop an occurrence without erasing the attempt. |
 | **Process** | Schema validity, steps, retries, actual tokens and cost, latency, the tool-call path signature. |
 

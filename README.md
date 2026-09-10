@@ -8,35 +8,32 @@
 <h1 align="center">Signal SDK</h1>
 
 <p align="center">A statistical measuring instrument for agent systems.<br>
-Deterministic graders · paired, clustered statistics · risk certificates</p>
+Deterministic graders · rulers · paired, clustered statistics · risk certificates</p>
 
 <p align="center"><img src="docs/assets/hero.jpg" alt="" width="100%"></p>
 
 Signal runs a precisely identified **function** (the system under test) against a
-constructed **book** of trajectories inside an external **environment**, grades every
-trial with deterministic graders, and reports three separate columns: **outcome**,
-**events**, **process**. They are never summed into one number.
+book of **scenarios** (constructed test examples with a ground state) inside an
+external **domain**, grades every trial deterministically, and reads **rulers**
+off the results: accuracy with a 95% interval, pass^k, cost, harm rates,
+agreement between raters. Three columns — **outcome**, **events**, **process** —
+never summed into one number.
 
-Nothing about the task domain lives in the core. Documents, tools, mandates and
-harm definitions are supplied by a `Domain`; the built-in default grades plain
-return values, and an optional invoice-payment domain shows a tool-using,
-adversarial setup with a tool-enforced mandate.
+TypeScript, Node 20+, zero runtime dependencies. The numerics (seeded RNG,
+cluster bootstrap, t/normal quantiles, Cholesky, a Laplace-approximation logistic
+mixed model) live in `src/statistics/` and are auditable in-repo.
 
-**[Documentation](https://felofix.github.io/signal-sdk/)** · **[Worked example with real numbers](https://felofix.github.io/signal-sdk/example.html)** · [llms.txt](docs/llms.txt)
-
-Measuring is not only a gate. `run_experiment()` compares variants on one book with the rulers you choose, and `rate_trials()` attaches human or model judges whose reliability becomes a ruler too.
+**[Documentation](https://felofix.github.io/signal-sdk/)** · **[Worked example](https://felofix.github.io/signal-sdk/example.html)** · [llms.txt](docs/llms.txt)
 
 ## Run It
 
-Python 3.11 or newer:
-
 ```sh
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e '.[dev]'
-signal-sdk validate                                    # simulation gate, PASS/FAIL per check
-signal-sdk demo --generic --output outputs/generic     # default domain, arithmetic book
-signal-sdk demo --output outputs/payments              # payments domain, injected hazards
+git clone https://github.com/felofix/signal-sdk && cd signal-sdk
+npm install
+npm test                                                     # build + node:test suite
+node dist/src/cli.js validate                                # eight PASS/FAIL simulation checks
+node dist/src/cli.js demo --generic --output outputs/generic # default domain, arithmetic book
+node dist/src/cli.js demo --output outputs/payments          # payments domain, injected hazards
 ```
 
 Both demos run without provider calls and add the domain's two trivial controls.
@@ -45,39 +42,47 @@ latency; read the Markdown and JSON certificates in `certificates/`.
 
 Measuring your own callable takes a book, a `Function` identity and a call:
 
-```python
-from signal_sdk import Trajectory, Function, FunctionImplementation, Label, MeasurementConfig, dataset_distribution, measure
+```ts
+import { Function, FunctionImplementation, Scenario, datasetDistribution, runExperiment } from "signal-sdk";
 
-trajectories = tuple(Trajectory(id=f"e{i}", input={"task": f"Uppercase: {w}"}, label=Label.EASY,
-                         ground_truth={"value": w.upper()}, cluster=f"g{i // 3}")
-                 for i, w in enumerate(["signal", "measure", "trajectory", "trial", "grader", "loss"]))
-distribution = dataset_distribution("Uppercase words", trajectories, label_rule="all easy", top_cluster="group")
+const words = ["signal", "measure", "scenario", "trial", "grader", "loss"];
+const book = words.map((w, i) => new Scenario({
+  id: `s${i}`, input: { task: `Uppercase: ${w}` }, label: "easy",
+  groundState: { value: w.toUpperCase() }, cluster: `g${Math.floor(i / 3)}`,
+}));
+const distribution = datasetDistribution("Uppercase words", book, { labelRule: "all easy", topCluster: "group" });
 
-def upper(context):
-    return context.input["task"].removeprefix("Uppercase: ").upper()
+const upper = (context: { input: { task: string } }) => context.input.task.replace("Uppercase: ", "").toUpperCase();
+const fn = new Function({ name: "upper", implementation: { module: "my-agent", revision: "abc123" } });
 
-function = Function(name="upper", implementation={"module": "my_agent", "revision": "abc123"})
-measurement = measure((FunctionImplementation(function, upper, kind="simulation"),), distribution, trajectories,
-                      config=MeasurementConfig(mode="simulation", repetitions=2))
+const experiment = await runExperiment("uppercase", [new FunctionImplementation(fn, upper, "simulation")], distribution, book, { repetitions: 2 });
+console.log(experiment.table());
 ```
 
-See [examples/return_values.py](examples/return_values.py) and
-[examples/paired_comparison.py](examples/paired_comparison.py).
+`runExperiment()` compares variants on one book with the rulers you choose;
+`rateTrials()` attaches human or model judges whose reliability becomes a ruler
+too. See [examples/](examples/).
 
 ## Read the Guide
 
-The documentation site lives in [`docs/`](docs/) and is built from [`docs/pages/`](docs/pages/) by `python docs/build_site.py`. It covers concepts, building a book, writing a domain, rulers, comparisons and power, certificates, the statistics, and a per-function SDK reference. [`docs/llms.txt`](docs/llms.txt) is the whole thing as one Markdown file for coding agents. The [specification map](docs/specification.md) and [release guide](docs/releasing.md) remain as Markdown.
+The documentation site lives in [`docs/`](docs/) and is built from
+[`docs/pages/`](docs/pages/) by `npm run docs`. It covers concepts, building a
+book, writing a domain, rulers, comparisons and power, certificates, the
+statistics, and a per-function SDK reference. [`docs/llms.txt`](docs/llms.txt)
+is the whole thing as one Markdown file for coding agents. The
+[specification map](docs/specification.md) and [release guide](docs/releasing.md)
+remain as Markdown.
 
 ## Scope
 
-The measurement core includes cluster bootstrap intervals, predeclared
-non-inferiority comparisons, pass^k, a logistic mixed model for difficulty,
-held-out calibration, cosmetic perturbations, assumed loss simulation and
-audit-only drift detection. Self-validation must pass before any function runs.
+Cluster bootstrap intervals, predeclared non-inferiority comparisons, pass^k, a
+logistic mixed model for difficulty, held-out calibration, cosmetic perturbations,
+assumed loss simulation and audit-only drift detection. Self-validation must pass
+before any function runs.
 
-There is no LLM judge, no composite score and no router. Severity and future-book
-predictions depend on printed assumptions; insufficient data is reported, not
-papered over.
+There is no LLM judge inside the SDK, no composite score and no router. A judge
+can be attached as a rater after the fact, and its reliability against the
+deterministic grader is itself a ruler. Severity and future-book predictions
+depend on printed assumptions; insufficient data is reported, not papered over.
 
-The import name `signal_sdk` avoids shadowing Python's standard-library `signal`.
-The proposed package name is `signal-risk-sdk`. **Nothing has been published to PyPI.**
+**Not yet published to npm.** The package name is `signal-sdk`; see the release guide.

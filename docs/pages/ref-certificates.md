@@ -2,52 +2,53 @@
 title: Certificates
 slug: certificates-reference
 group: SDK reference
-summary: certificates(), markdown(), export_certificates(), compare_measurements(), limitations().
+summary: certificates(), markdown(), exportCertificates(), compareMeasurements(), limitations().
 ---
 
-```python
-from signal_sdk.certificate import (RiskCertificate, certificates, markdown, export_certificates,
-                                    compare_measurements, limitations)
+```ts
+import { RiskCertificate, certificates, compareMeasurements, exportCertificates, limitations, markdown } from "signal-sdk/certificate";
 
-certificates(measurement: Measurement) -> tuple[RiskCertificate, ...]
-markdown(certificate: RiskCertificate) -> str
-export_certificates(measurement: Measurement, directory: str | Path) -> tuple[Path, ...]
-compare_measurements(pre: Measurement, post: Measurement) -> dict
-limitations(measurement: Measurement, function_id: str) -> list[str]
+certificates(measurement: Measurement): RiskCertificate[]
+markdown(certificate: RiskCertificate): string
+exportCertificates(measurement: Measurement, directory: string): string[]
+compareMeasurements(pre: Measurement, post: Measurement): JsonObject
+limitations(measurement: Measurement, functionId: string): string[]
 ```
 
 ## Example
 
-```python
-from signal_sdk.certificate import certificates, markdown
+```ts
+import { writeFileSync } from "node:fs";
+import { certificates, markdown } from "signal-sdk/certificate";
 
-for report in certificates(measurement):
-    print(report.function_id[:12], report.status)
-    print(report.columns["events"]["wrong_account"]["attempts"])
-    open(f"{report.function_id}.md", "w").write(markdown(report))
+for (const report of certificates(measurement)) {
+  console.log(report.functionId.slice(0, 12), report.status);
+  console.log(report.columns.events.wrong_account.attempts);
+  writeFileSync(`${report.functionId}.md`, markdown(report));
+}
 ```
 
 ```text
 bd5aade68e88 simulation
-{"estimate": 0.0, "interval": [0.0, 0.2752], "confidence": 0.95, "trajectories": 24, "clusters": 16,
- "zero_event_note": "0 attempts in 16 independent clusters; the 95% upper bound is not 0 ...", ...}
+{"estimate": 0, "interval": [0, 0.2752], "confidence": 0.95, "scenarios": 24, "clusters": 16,
+ "zeroEventNote": "No events were observed in 24 scenarios across 16 independent clusters. The conservative one-sided 95% upper rate bound is …", ...}
 ```
 
 ## RiskCertificate
 
-| Field | Meaning |
+| Member | Meaning |
 |---|---|
-| `measurement_id`, `function_id` | Content hashes. |
+| `measurementId`, `functionId` | Content hashes. |
 | `status` | `simulation`, `measured`, `control`, `execution_errors_present`, `invalid_provider_version`. |
 | `columns` | `outcome`, `events`, `process`, `metrics` as returned by `summarize()`. |
-| `sections` | Ordered `{"title", "data"}` blocks: identity, distribution, environment and graders, validity, harm classes, custom metrics, loss, difficulty, consistency, calibration, robustness, injection, limitations, hours and cost, comparisons. |
+| `sections` | Ordered `{ title, data }` blocks: identity, distribution, environment and graders, validity, harm classes, custom metrics, loss, difficulty, consistency, calibration, robustness, injection, limitations, hours and cost, comparisons. |
 | `id` | Hash of the certificate. |
 
-## compare_measurements()
+## compareMeasurements()
 
-Requires the same trajectories, distribution, environment, graders and repetitions, a shared `prepost_plan` that predates both, and `pre.timestamp <= post.timestamp`. Returns `pre_measurement_id`, `post_measurement_id`, the plan, `paired_differences` (one `compare()` report per planned comparison, tagged `same_function_two_measurements` or `different_functions`), and both certificate sets.
+Requires the same scenarios, distribution, environment, graders and repetitions, a shared `prepostPlan` that predates both, and `pre.timestamp <= post.timestamp`. Returns `preMeasurementId`, `postMeasurementId`, the plan, `pairedDifferences` (one `compare()` report per planned comparison, tagged `same_function_two_measurements` or `different_functions`), and both certificate sets.
 
-## export_certificates()
+## exportCertificates()
 
 Writes `<function-id>.json` and `<function-id>.md` per function and returns the paths.
 

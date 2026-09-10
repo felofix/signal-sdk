@@ -8,55 +8,50 @@ A grader judges one trial. A ruler turns the rows of many trials into one number
 
 ## Example
 
-```python
-from signal_sdk import (Ruler, rate, accuracy, pass_power_k, path_consistency,
-                        inter_rater_reliability, agreement_with_grader, DEFAULT_RULERS)
-from signal_sdk.statistics import interval
-from signal_sdk.statistics.core import trajectory_groups
+```ts
+import { DEFAULT_RULERS, Ruler, accuracy, agreementWithGrader, interRaterReliability, passPowerK, pathConsistency, rate } from "signal-sdk";
+import { interval, scenarioGroups } from "signal-sdk/statistics";
 
-rulers = (
-    accuracy(),                        # correct final state
-    rate("field_f1"),                  # any row metric with a cluster interval
-    rate("attempts:external_send"),    # harm attempt rate
-    rate("loss:external_send"),        # occurred severity, per trajectory
-    rate("metric:searches", higher_is_better=False),   # a domain metric
-    pass_power_k(),                    # all repetitions correct
-    path_consistency(),                # identical tool-call path across repetitions
-    inter_rater_reliability(["grader", "llm_judge"]),
-    agreement_with_grader("llm_judge"),
-)
+const rulers = [
+  accuracy(),                          // correct final state
+  rate("fieldF1"),                     // any row metric with a cluster interval
+  rate("attempts:external_send"),      // harm attempt rate
+  rate("loss:external_send"),          // occurred severity, per scenario
+  rate("metric:searches", { higherIsBetter: false }),   // a domain metric
+  passPowerK(),                        // all repetitions correct
+  pathConsistency(),                   // identical tool-call path across repetitions
+  interRaterReliability(["grader", "llm_judge"]),
+  agreementWithGrader("llm_judge"),
+];
 
-# A custom ruler: fraction of trajectories answered within 3 steps on every repetition.
-def fast(rows, samples, seed):
-    groups = trajectory_groups(rows)
-    values = [float(all(r["steps"] <= 3 for r in trials)) for trials in groups.values()]
-    clusters = [str(trials[0]["cluster"]) for trials in groups.values()]
-    return interval(values, clusters, samples=samples, seed=seed, bounds=(0.0, 1.0))
-
-rulers += (Ruler("fast^k", fast, "All repetitions within three steps", higher_is_better=True),)
+// A custom ruler: fraction of scenarios answered within 3 steps on every repetition.
+const fast = new Ruler("fast^k", (rows, samples, seed) => {
+  const groups = [...scenarioGroups(rows).values()];
+  return interval(groups.map((trials) => (trials.every((r) => r.steps <= 3) ? 1 : 0)), groups.map((t) => t[0].cluster), { samples, seed, bounds: [0, 1] });
+}, { description: "All repetitions within three steps", higherIsBetter: true });
 ```
 
 ## Built-in rulers
 
 | Ruler | Reads | Note |
 |---|---|---|
-| `accuracy()` | `correct` | Trajectory-weighted; repetitions are averaged first. |
-| `rate(metric)` | any row metric | `correct`, `field_f1`, `schema_valid`, `cost`, `latency_ms`, `tokens`, `steps`, `retries`, `attempts:<harm>`, `occurrences:<harm>`, `loss:<harm>`, `metric:<name>`. |
-| `pass_power_k()` | `correct` per repetition | pass^k, not pass@k. |
-| `path_consistency()` | `path_signature` | Same ordered tool names across repetitions. |
-| `inter_rater_reliability(raters)` | `ratings` | Nominal Krippendorff's alpha; bootstrap over clusters. |
-| `agreement_with_grader(rater)` | `ratings`, `correct` | Fraction of trials where the rater's truthy/falsy verdict matches the grader. |
+| `accuracy()` | `correct` | Scenario-weighted; repetitions are averaged first. |
+| `rate(metric)` | any row metric | `correct`, `fieldF1`, `schemaValid`, `cost`, `latencyMs`, `tokens`, `steps`, `retries`, `attempts:<harm>`, `occurrences:<harm>`, `loss:<harm>`, `metric:<name>`. |
+| `passPowerK()` | `correct` per repetition | pass^k, not pass@k. |
+| `pathConsistency()` | `pathSignature` | Same ordered tool names across repetitions. |
+| `interRaterReliability(raters)` | `ratings` | Nominal Krippendorff's alpha; bootstrap over clusters. |
+| `agreementWithGrader(rater)` | `ratings`, `correct` | Fraction of trials where the rater's truthy/falsy verdict matches the grader. |
 
-`DEFAULT_RULERS` is accuracy, field_f1, pass^k, path_consistency, cost, latency_ms, steps.
+`DEFAULT_RULERS` is accuracy, fieldF1, pass^k, pathConsistency, cost, latencyMs, steps.
 
 ## Intervals
 
-Every ruler returns `{"estimate", "interval": [low, high], "confidence": 0.95, "clusters", ...}`. Rates use the top-cluster bootstrap with a cluster-t envelope and a plain-language `zero_event_note` when nothing was observed. A ruler that cannot be computed returns `estimate: None` and says why in `method`.
+Every ruler returns `{ estimate, interval: [low, high], confidence: 0.95, clusters, ... }`. Rates use the top-cluster bootstrap with a cluster-t envelope and a plain-language `zeroEventNote` when nothing was observed. A ruler that cannot be computed returns `estimate: null` and says why in `method`.
 
 ## Judges
 
-A language-model judge is a rater. Run it over recorded transcripts with `rate_trials()`, then hold it against the deterministic grader with `agreement_with_grader()` and against other raters with `inter_rater_reliability()`. An alpha near 1 means the judge measures what the grader measures; below about 0.67 it is not yet a ruler. Deterministic graders still define insured harms.
+A language-model judge is a rater. Run it over recorded transcripts with `rateTrials()`, then hold it against the deterministic grader with `agreementWithGrader()` and against other raters with `interRaterReliability()`. An alpha near 1 means the judge measures what the grader measures; below about 0.67 it is not yet a ruler. Deterministic graders still define insured harms.
 
 ## Writing a ruler
 
-A `Ruler` is a name plus `measure(rows, bootstrap_samples, seed) -> dict`. Rows are the dictionaries from `observation_rows()`: one per trial with `trajectory_id`, `function_id`, `repetition`, `seed`, `cluster`, `label`, `correct`, `field_f1`, process fields, `attempted`, `occurred`, `severity`, `metric:*`, `ratings`, `risk_signal`. Average within a trajectory first, then use `interval()` over clusters. Set `metric` if the ruler is a plain row metric so experiments can pair it.
+A `Ruler` is a name plus `measure(rows, bootstrapSamples, seed) → { estimate, interval, ... }`. Rows are the objects from `observationRows()`: one per trial with `scenarioId`, `functionId`, `repetition`, `seed`, `cluster`, `label`, `correct`, `fieldF1`, process fields, `attempted`, `occurred`, `severity`, `metrics`, `ratings`, `riskSignal`. Average within a scenario first, then use `interval()` over clusters. Set `metric` if the ruler is a plain row metric so experiments can pair it.

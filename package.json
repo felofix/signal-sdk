@@ -1,0 +1,46 @@
+{
+  "name": "signal-sdk",
+  "version": "0.4.0",
+  "description": "A statistical measuring instrument for agent systems: deterministic graders, rulers, paired and clustered statistics, risk certificates.",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/felofix/signal-sdk"
+  },
+  "homepage": "https://felofix.github.io/signal-sdk/",
+  "engines": {
+    "node": ">=20"
+  },
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "exports": {
+    ".": "./dist/src/index.js",
+    "./statistics": "./dist/src/statistics/index.js",
+    "./domains/payments": "./dist/src/domains/payments/index.js",
+    "./certificate": "./dist/src/certificate.js",
+    "./visualization": "./dist/src/visualization.js",
+    "./dashboard": "./dist/src/dashboard/index.js",
+    "./experiment": "./dist/src/experiment.js",
+    "./rulers": "./dist/src/rulers.js"
+  },
+  "bin": {
+    "signal-sdk": "./dist/src/cli.js"
+  },
+  "files": [
+    "dist/src",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test \"dist/tests/*.test.js\"",
+    "validate": "npm run build && node dist/src/cli.js validate",
+    "docs": "node docs/build_site.mjs",
+    "lint": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.2",
+    "typescript": "^5.9.3"
+  }
+}

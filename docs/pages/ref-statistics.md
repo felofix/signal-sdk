@@ -2,59 +2,61 @@
 title: Statistics functions
 slug: statistics-functions
 group: SDK reference
-summary: The estimators underneath rulers and certificates.
+summary: The estimators underneath rulers and certificates, implemented in-repo with no numeric dependencies.
 ---
 
-```python
-from signal_sdk.statistics import (summarize, compare, difficulty, calibrate, robustness,
-                                   loss_distribution, sample_size, detectable_difference, interval)
-from signal_sdk.statistics.drift import detect_drift
-from signal_sdk.audit import select_audit, audit_drift
+```ts
+import { calibrate, compare, detectDrift, detectableDifference, difficulty, interval, lossDistribution, robustness,
+         sampleSize, summarize, Rng, normPpf, tPpf, quantile } from "signal-sdk/statistics";
 
-interval(values, clusters, *, alpha=0.05, samples=2000, seed=0, bounds=None) -> dict
-summarize(rows, *, bootstrap_samples=2000, seed=0) -> dict
-compare(rows, reference_id, candidate_id, *, comparisons=(), bootstrap_samples=2000, seed=0, family_size=None) -> dict
-difficulty(rows, *, seed=0, future_trajectories=10000, draws=1000) -> dict
-calibrate(rows, *, function_id, target_residual_loss=None, seed=0, bins=5, bootstrap_samples=1000) -> dict
-robustness(rows, *, bootstrap_samples=1000, seed=0) -> dict
-loss_distribution(rows, *, function_id, severity_assumptions, simulations=5000, seed=0, horizon=10000) -> dict
-sample_size(margin_currency_per_10000, paired_sd_currency, *, power=0.8, icc=0, cluster_size=1, comparisons=1) -> dict
-detectable_difference(trajectories, paired_sd_currency, *, power=0.8, icc=0, cluster_size=1, comparisons=1) -> dict
-detect_drift(audit_rows, *, baselines, cost_upper_bound=None, alpha=0.05, expected_shift=0.1) -> dict
+interval(values: number[], clusters: string[], { alpha = 0.05, samples = 2000, seed = 0, bounds = null }): Estimate
+summarize(rows, { bootstrapSamples = 2000, seed = 0 }): { functions: Record<string, FunctionSummary>, unit, resamplingUnit }
+compare(rows, referenceId, candidateId, { comparisons = [], bootstrapSamples = 2000, seed = 0, familySize = null }): CompareResult
+difficulty(rows, { seed = 0, futureScenarios = 10000, draws = 1000 }): DifficultyResult
+calibrate(rows, { functionId, targetResidualLoss = null, seed = 0, bins = 5, bootstrapSamples = 1000 }): CalibrationResult
+robustness(rows, { bootstrapSamples = 1000, seed = 0 }): RobustnessResult
+lossDistribution(rows, { functionId, severityAssumptions, simulations = 5000, seed = 0, horizon = 10000 }): LossResult
+sampleSize(marginCurrencyPer10000, pairedSdCurrency, { power = 0.8, icc = 0, clusterSize = 1, comparisons = 1 })
+detectableDifference(scenarios, pairedSdCurrency, { power = 0.8, icc = 0, clusterSize = 1, comparisons = 1 })
+detectDrift(auditRows, { baselines, alpha = 0.05, expectedShift = 0.1, costUpperBound = null }): DriftResult
 ```
 
 ## Example
 
-```python
-from signal_sdk.runner import observation_rows
-from signal_sdk.statistics import summarize, compare, difficulty
+```ts
+import { observationRows } from "signal-sdk";
+import { compare, difficulty, summarize } from "signal-sdk/statistics";
 
-rows = observation_rows(measurement)
-summary = summarize(rows, bootstrap_samples=1000)
-print(summary["functions"][function.id]["consistency"]["pass_power_k"])
+const rows = observationRows(measurement);
+const summary = summarize(rows, { bootstrapSamples: 1000 });
+console.log(summary.functions[fn.id].consistency.passPowerK);
 
-report = compare(rows, reference.id, candidate.id, comparisons=[
-    {"name": "acc", "metric": "correct", "margin": 0.02, "confirmatory": True},
-    {"name": "leak", "metric": "loss:external_send", "margin": 500, "maximum_severity": 5000, "confirmatory": True},
-])
-print([c["conclusion"] for c in report["comparisons"]])
+const report = compare(rows, reference.id, candidate.id, { comparisons: [
+  { name: "acc", metric: "correct", margin: 0.02, confirmatory: true },
+  { name: "leak", metric: "loss:external_send", margin: 500, maximumSeverity: 5000, confirmatory: true },
+] });
+console.log(report.comparisons.map((c) => c.conclusion));
 
-hard = difficulty(rows, seed=1)
-print(hard["status"], hard["predictions"][function.id]["next_book_correct_rate"])
+const hard = difficulty(rows, { seed: 1 });
+console.log(hard.status, hard.predictions[fn.id]?.nextBookCorrectRate);
 ```
 
 ## What each returns
 
 | Function | Result |
 |---|---|
-| `interval` | `estimate`, `interval`, `confidence`, `trajectories`, `clusters`, `method`, `zero_event_note`. Top-cluster bootstrap with cluster-t envelope; conservative guards for degenerate samples. |
-| `summarize` | Per function: `outcome` (correct, field_f1, required_escalation_met, by label), `events` (per harm: attempts, occurrences, counts, observed loss, by label), `process` (+ cost distribution), `consistency` (pass^k, path), `metrics`. |
-| `compare` | Paired trajectory differences with Bonferroni family-wise intervals and a `non_inferior` / `not_established` / `exploratory` conclusion per comparison. |
-| `difficulty` | Logistic mixed model `correct ~ function × label + (1|cluster) + (1|trajectory) + (1|trajectory:function)`; leave-function-out difficulty per trajectory, label-explained variance, posterior predictions for the next 10,000 trajectories with a width check. Needs 12 trajectories, 2 functions, 4 clusters. |
+| `interval` | `estimate`, `interval`, `confidence`, `scenarios`, `clusters`, `method`, `zeroEventNote`. Top-cluster bootstrap with cluster-t envelope; conservative guards for degenerate samples. |
+| `summarize` | Per function: `outcome` (correct, fieldF1, requiredEscalationMet, by label), `events` (per harm: attempts, occurrences, counts, observed loss, by label), `process` (+ cost distribution), `consistency` (pass^k, path), `metrics`. |
+| `compare` | Paired scenario differences with Bonferroni family-wise intervals and a `non_inferior` / `not_established` / `exploratory` conclusion per comparison. |
+| `difficulty` | Logistic mixed model `correct ~ function × label + (1|cluster) + (1|scenario) + (1|scenario:function)` fitted by Laplace approximation with Nelder–Mead on the three variance components; leave-function-out difficulty per scenario, label-explained variance, posterior predictions for the next 10,000 scenarios with a width check. Needs 12 scenarios, 2 functions, 4 clusters; dense, so capped at 2,500 coefficients. |
 | `calibrate` | Risk signal versus attempted events; threshold fitted on half the clusters, curves reported on the other half. |
 | `robustness` | Cosmetic outcome-change fraction over variants; tool-fault mishandled fraction. |
-| `loss_distribution` | Per harm: simulated loss per 10,000 trajectories from occurrence frequency (Jeffreys beta) and an assumed fixed / gamma / lognormal severity; mean, percentiles, tail mean, intervals. |
-| `sample_size`, `detectable_difference` | Paired normal approximation with cluster design effect. |
-| `detect_drift` | Hoeffding e-process per metric over completed audit clusters, Bonferroni anytime threshold. Audit rows only. |
+| `lossDistribution` | Per harm: simulated loss per 10,000 scenarios from occurrence frequency (Jeffreys beta) and an assumed fixed / gamma / lognormal severity; mean, percentiles, tail mean, intervals. |
+| `sampleSize`, `detectableDifference` | Paired normal approximation with cluster design effect. |
+| `detectDrift` | Hoeffding e-process per metric over completed audit clusters, Bonferroni anytime threshold. Audit rows only. |
+
+## Numerics
+
+`Rng` is a seeded xoshiro128** generator with normal, gamma, beta, binomial and lognormal draws. `normPpf`, `tPpf`, `betaPpf`, `proportionInterval`, `quantile`, `spearman` and the Cholesky solver are small, tested implementations in `src/statistics/`. There are no numeric dependencies to trust.
 
 See [Statistics guide](#/statistics) for estimands and assumptions.
