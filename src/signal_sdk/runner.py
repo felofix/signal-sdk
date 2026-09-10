@@ -1,40 +1,26 @@
-"""Crossed execution with isolated environments, controls, and a validation gate."""
+"""Crossed execution with isolated environments, domain controls, and a validation gate."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from decimal import Decimal
 from hashlib import sha256
 from inspect import isawaitable
-from pathlib import Path
 from time import perf_counter
-from typing import Any, Callable, Literal
+from typing import Callable, Literal
 
-from .controls import always_escalate, always_pay
-from .environment import ToolEnvironment
-from .generators import generate_book
-from .graders import grade
+from .domain import RETURN_VALUES, Domain, Execute, TrialContext
 from .models import (
-    DocumentDistribution, Episode, Function, Mandate, Measurement, MeasurementConfig,
-    ModelIdentity, Trial, ValidityPeriod, content_hash, thaw,
+    Episode, Function, Measurement, MeasurementConfig, TaskDistribution, Trial, ValidityPeriod,
+    content_hash, thaw,
 )
-
-
-@dataclass(frozen=True)
-class TrialContext:
-    """The function sees input and tools, never labels or grading ground truth."""
-
-    input: dict[str, Any]
-    tools: ToolEnvironment
-    seed: int
-    repetition: int
+from .tracing import TraceRecorder
 
 
 @dataclass(frozen=True)
 class FunctionImplementation:
     definition: Function
-    execute: Callable[[TrialContext], Any]
+    execute: Execute
     kind: Literal["real", "simulation", "control"] = "real"
 
     def __post_init__(self) -> None:
@@ -42,24 +28,11 @@ class FunctionImplementation:
             raise ValueError("A function implementation needs a callable and a valid execution kind")
 
 
-def control_functions(distribution: DocumentDistribution, episodes: tuple[Episode, ...],
-                      validity: ValidityPeriod, currency: str = "USD") -> tuple[FunctionImplementation, ...]:
-    """Controls have explicit broad mandates so their harmful attempts remain visible."""
-    vendors, accounts, amounts = set(), set(), []
-    for episode in episodes:
-        for document in episode.environment.get("documents", ()):
-            vendors.add(str(document.get("vendor", "")))
-            accounts.add(str(document.get("account", "")))
-            amounts.append(Decimal(str(document.get("amount", 0))))
-    mandate = Mandate(amount_cap=max(amounts, default=Decimal(0)),
-                      allowed_vendors=tuple(sorted(vendors)), allowed_accounts=tuple(sorted(accounts)), currency=currency)
+def control_functions(domain: Domain) -> tuple[FunctionImplementation, ...]:
+    """Controls are functions like any other; their identity is the control itself."""
     return tuple(FunctionImplementation(Function(
-        name=name, model=ModelIdentity(provider="signal", name=name, version="1"),
-        prompts=(name,), tool_descriptions={"payment_tools": "signal-payment-tools-v1"},
-        toolset={"implementation": "signal-payment-tools-v1", "control": name},
-        mandate=mandate, distribution_id=distribution.id, validity=validity,
-    ), execute, "control") for name, execute in
-        (("always_pay", always_pay), ("always_escalate", always_escalate)))
+        name=name, implementation={"control": name, "domain": domain.environment.name}), execute, "control")
+        for name, execute in domain.controls)
 
 
 def trial_seed(master_seed: int, episode: Episode, repetition: int) -> int:
@@ -68,21 +41,23 @@ def trial_seed(master_seed: int, episode: Episode, repetition: int) -> int:
     return int.from_bytes(sha256(identity.encode()).digest()[:4], "big")
 
 
-def _verify_book(distribution: DocumentDistribution, episodes: tuple[Episode, ...]) -> None:
+def dataset_distribution(name: str, episodes: tuple[Episode, ...], *, label_rule: str,
+                         hazard_rates: dict[str, float] | None = None, attack_suite_version: str | None = None,
+                         top_cluster: str = "episode") -> TaskDistribution:
+    """Bind an externally constructed book by its complete content hash."""
+    return TaskDistribution(name=name, dataset_hash=content_hash(episodes), label_rule=label_rule,
+                            hazard_rates=hazard_rates or {}, attack_suite_version=attack_suite_version,
+                            top_cluster=top_cluster)
+
+
+def _verify_book(distribution: TaskDistribution, episodes: tuple[Episode, ...], domain: Domain) -> None:
     if distribution.dataset_hash:
         if content_hash(episodes) != distribution.dataset_hash:
             raise ValueError("Episode content does not match the distribution dataset hash")
-    elif distribution.generator == "signal-payments-v1":
-        params = distribution.parameters
-        expected_distribution, expected = generate_book(
-            params["count"], distribution.seed, variants=params["cosmetic_variants"],
-            hazard_rates=thaw(distribution.hazard_rates), vendors=params["vendors"],
-            templates=params["templates"], impossible_rate=params["impossible_rate"],
-        )
-        if distribution.id != expected_distribution.id or content_hash(episodes) != content_hash(expected):
-            raise ValueError("Episodes do not reproduce the bound generator configuration")
-    else:
-        raise ValueError("For a custom generator, construct episodes then bind them with dataset_distribution")
+    elif domain.reproduce is None:
+        raise ValueError("This domain cannot reproduce generated books; bind episodes with dataset_distribution")
+    elif content_hash(episodes) != content_hash(domain.reproduce(distribution)):
+        raise ValueError("Episodes do not reproduce the bound generator configuration")
     originals = {e.id: e for e in episodes if e.variant_of is None}
     for episode in episodes:
         if episode.variant_of:
@@ -92,12 +67,14 @@ def _verify_book(distribution: DocumentDistribution, episodes: tuple[Episode, ..
                 raise ValueError("Variants must retain original label, cluster, and ground truth")
 
 
-def _execute(implementation: FunctionImplementation, episode: Episode,
-             repetition: int, seed: int) -> Trial:
-    tools = ToolEnvironment(episode, implementation.definition.mandate, seed)
-    tools.append_message("user", str(episode.input.get("task", episode.input)))
-    context = TrialContext(input=tools.input, tools=tools, seed=seed, repetition=repetition)
-    error = None
+def _execute(implementation: FunctionImplementation, episode: Episode, repetition: int, seed: int,
+             domain: Domain = RETURN_VALUES) -> Trial:
+    trace = TraceRecorder()
+    tools = domain.make_environment(episode, seed, trace)
+    task = episode.input.get("task", episode.input) if isinstance(episode.input, dict) else episode.input
+    trace.append_message("user", str(task))
+    context = TrialContext(input=thaw(episode.input), tools=tools, trace=trace, seed=seed, repetition=repetition)
+    error, response = None, None
     try:
         response = implementation.execute(context)
         if isawaitable(response):
@@ -105,50 +82,43 @@ def _execute(implementation: FunctionImplementation, episode: Episode,
                 response.close()
             raise TypeError("Use a synchronous adapter; execute returned an awaitable")
         if response is not None:
-            tools.append_message("assistant", str(response))
+            trace.append_message("assistant", str(response))
         if implementation.kind == "real":
-            model_steps = [s for s in tools.transcript().steps if s.kind == "model"]
+            model_steps = [s for s in trace.transcript().steps if s.kind == "model"]
             if not model_steps:
                 raise ValueError("Real functions must record actual model usage and provider_version")
-            if any(s.metadata.get("provider_version") != implementation.definition.model.version
-                   for s in model_steps):
+            versions = {m.version for m in implementation.definition.model_identities}
+            if any(s.metadata.get("provider_version") not in versions for s in model_steps):
                 raise ValueError("Observed provider version does not match the insured function")
     except Exception as exc:
         error = f"{type(exc).__name__}: {exc}"
-        tools.append_message("execution_error", error)
-    if implementation.kind == "real" and not any(s.kind == "model" for s in tools.transcript().steps):
-        tools.record_usage(tokens=None, cost=None, name="unreported_usage",
-                           metadata={"usage_missing": True})
-    transcript, outcome = tools.transcript(), tools.outcome()
-    grades = grade(episode, transcript, outcome)
-    return Trial(episode_id=episode.id, function_id=implementation.definition.id,
-                 repetition=repetition, seed=seed, transcript=transcript,
-                 outcome=outcome, grades=grades, error=error)
+        trace.append_message("execution_error", error)
+    if implementation.kind == "real" and not any(s.kind == "model" for s in trace.transcript().steps):
+        trace.record_usage(tokens=None, cost=None, name="unreported_usage", metadata={"usage_missing": True})
+    transcript, outcome = trace.transcript(), tools.finish(response)
+    return Trial(episode_id=episode.id, function_id=implementation.definition.id, repetition=repetition,
+                 seed=seed, transcript=transcript, outcome=outcome,
+                 grades=domain.grade(episode, transcript, outcome), error=error)
 
 
-def measure(functions: tuple[FunctionImplementation, ...], distribution: DocumentDistribution,
-            episodes: tuple[Episode, ...], *, config: MeasurementConfig | None = None,
+def measure(functions: tuple[FunctionImplementation, ...], distribution: TaskDistribution,
+            episodes: tuple[Episode, ...], *, domain: Domain = RETURN_VALUES,
+            config: MeasurementConfig | None = None, validity: ValidityPeriod | None = None,
             on_trial: Callable[[Trial], None] | None = None) -> Measurement:
-    """Run the full crossing. Built-in controls and self-validation are mandatory."""
+    """Run the full crossing. Domain controls and self-validation are mandatory."""
     from .validation import self_validate
 
     config = config or MeasurementConfig(mode="real")
-    if config.grader_version != "signal-graders-v1":
-        raise ValueError("Unsupported grader definition version")
     if not functions:
         raise ValueError("Provide at least one function implementation")
-    _verify_book(distribution, episodes)
+    _verify_book(distribution, episodes, domain)
     now = datetime.now(UTC)
-    if any(f.definition.distribution_id != distribution.id for f in functions):
-        raise ValueError("A function is bound to a different distribution")
-    if any(not f.definition.validity.start <= now < f.definition.validity.end for f in functions):
-        raise ValueError("Measurement must occur within each function's validity period")
+    if validity and not validity.start <= now < validity.end:
+        raise ValueError("Measurement must occur within its validity period")
     if config.mode == "simulation" and any(f.kind == "real" for f in functions):
         raise ValueError("Real functions cannot run in simulation mode")
     if config.mode == "real" and any(f.kind != "real" for f in functions):
         raise ValueError("Real mode requires real function implementations")
-    if any(f.definition.mandate.currency != config.currency for f in functions):
-        raise ValueError("All functions and severity assumptions must use the measurement currency")
     if any(f.kind == "control" for f in functions):
         raise ValueError("Controls are added by the runner; supply measured functions only")
     definitions = {f.definition.id for f in functions}
@@ -157,17 +127,10 @@ def measure(functions: tuple[FunctionImplementation, ...], distribution: Documen
     for comparison in config.confirmatory_comparisons:
         if not {comparison.reference_id, comparison.candidate_id} <= definitions:
             raise ValueError("Predeclared comparisons must reference supplied functions")
-        if comparison.metric.startswith(("attempts:", "occurrences:")):
-            raise ValueError("Confirmatory harm margins must use loss:<harm> in currency per 10,000")
     validation = self_validate()
     if validation["status"] != "PASS":
         raise RuntimeError("Self-validation failed; no function execution is allowed")
-    validation["grader_definition"] = {
-        "version": config.grader_version,
-        "source_sha256": sha256(Path(__file__).with_name("graders.py").read_bytes()).hexdigest(),
-    }
-    validation["evidence_id"] = content_hash({k: v for k, v in validation.items() if k != "evidence_id"})
-    controls = control_functions(distribution, episodes, functions[0].definition.validity, config.currency)
+    controls = control_functions(domain)
     implementations = (*functions, *controls)
     started = perf_counter()
     trials = []
@@ -175,13 +138,14 @@ def measure(functions: tuple[FunctionImplementation, ...], distribution: Documen
         for repetition in range(config.repetitions):
             seed = trial_seed(config.seed, episode, repetition)
             for implementation in implementations:
-                trial = _execute(implementation, episode, repetition, seed)
+                trial = _execute(implementation, episode, repetition, seed, domain)
                 trials.append(trial)
                 if on_trial:
                     on_trial(trial)
-    return Measurement(functions=tuple(f.definition for f in implementations),
-                       distribution=distribution, episodes=episodes, trials=tuple(trials),
-                       timestamp=now, config=config, validation=validation,
+    return Measurement(functions=tuple(f.definition for f in implementations), distribution=distribution,
+                       environment=domain.environment, graders=domain.graders, validity=validity,
+                       control_ids=tuple(c.definition.id for c in controls), episodes=episodes,
+                       trials=tuple(trials), timestamp=now, config=config, validation=validation,
                        elapsed_seconds=perf_counter() - started)
 
 
@@ -204,9 +168,6 @@ def observation_rows(measurement: Measurement, *, include_variants: bool = False
                 severity[key] = severity.get(key, 0.0) + float(event.severity)
         signals = [s.result["risk_signal"] for s in trial.transcript.steps
                    if s.kind == "signal" and isinstance(s.result, dict) and "risk_signal" in s.result]
-        signature = {"payments": [thaw(a.arguments) for a in trial.outcome.payments],
-                     "emails": [thaw(a.arguments) for a in trial.outcome.emails],
-                     "held": trial.outcome.held, "escalated": trial.outcome.escalated}
         rows.append({"episode_id": episode.id, "function_id": trial.function_id,
                      "repetition": trial.repetition, "seed": trial.seed, "cluster": episode.cluster,
                      "label": episode.label.value, "correct": trial.grades.outcome.correct,
@@ -214,10 +175,12 @@ def observation_rows(measurement: Measurement, *, include_variants: bool = False
                      "impossible_escalated": trial.grades.outcome.impossible_escalated,
                      **trial.grades.process.model_dump(), "attempted": attempted,
                      "occurred": occurred, "severity": severity,
+                     **{f"metric:{k}": v for k, v in trial.grades.metrics.items()},
                      "risk_signal": signals[-1] if signals else None,
                      "variant_of": episode.variant_of,
                      "ground_truth_hash": content_hash(episode.ground_truth),
-                     "outcome_signature": content_hash(signature),
+                     "outcome_signature": content_hash({"value": trial.outcome.value, "escalated": trial.outcome.escalated,
+                                                        "actions": [(a.tool, a.arguments) for a in trial.outcome.actions]}),
                      "tool_fault": any(h.type == "tool_fault" for h in episode.hazards),
                      "execution_error": trial.error})
     return rows

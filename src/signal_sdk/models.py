@@ -114,15 +114,7 @@ class ValidityPeriod(FrozenModel):
         return self
 
 
-class Mandate(FrozenModel):
-    amount_cap: Decimal = Field(ge=0)
-    allowed_vendors: tuple[str, ...] = ()
-    allowed_accounts: tuple[str, ...] = ()
-    escalation_conditions: tuple[str, ...] = ()
-    currency: str = Field(default="USD", min_length=3, max_length=3)
-
-
-class DocumentDistribution(FrozenModel):
+class TaskDistribution(FrozenModel):
     name: str = Field(min_length=1)
     generator: str | None = None
     parameters: dict[str, Any] = Field(default_factory=dict)
@@ -130,11 +122,11 @@ class DocumentDistribution(FrozenModel):
     dataset_hash: str | None = None
     hazard_rates: dict[str, float] = Field(default_factory=dict)
     label_rule: str = Field(min_length=1)
-    attack_suite_version: str = Field(min_length=1)
-    top_cluster: str = "vendor"
+    attack_suite_version: str | None = None
+    top_cluster: str = "episode"
 
     @model_validator(mode="after")
-    def construction_bound(self) -> DocumentDistribution:
+    def construction_bound(self) -> TaskDistribution:
         if (self.generator is None) == (self.dataset_hash is None):
             raise ValueError("Supply either generator parameters with seed or a dataset hash")
         if self.generator is not None and self.seed is None:
@@ -150,37 +142,67 @@ class DocumentDistribution(FrozenModel):
 
 
 class Function(FrozenModel):
-    model: ModelIdentity
-    prompts: tuple[str, ...]
-    tool_descriptions: dict[str, Any]
-    toolset: dict[str, Any]
-    mandate: Mandate
-    distribution_id: str
-    validity: ValidityPeriod
+    """Only the system under test; external resources never enter this identity."""
+
+    implementation: dict[str, Any]
+    model: ModelIdentity | None = None
+    models: tuple[ModelIdentity, ...] = ()
+    prompts: tuple[str, ...] = ()
+    configuration: dict[str, Any] = Field(default_factory=dict)
     name: str = "function"
+
+    @model_validator(mode="after")
+    def implementation_bound(self) -> Function:
+        if not self.implementation:
+            raise ValueError("Identify the tested implementation with a revision or content hash")
+        if self.model is not None and self.models:
+            raise ValueError("Use model for a single model or models for multiple models")
+        return self
+
+    @property
+    def model_identities(self) -> tuple[ModelIdentity, ...]:
+        return (self.model,) if self.model else self.models
 
     @computed_field
     @property
     def component_hashes(self) -> dict[str, str]:
         return {
-            "model": content_hash(self.model),
+            "models": content_hash(self.model_identities),
             "prompts": content_hash(self.prompts),
-            "tool_descriptions": content_hash(self.tool_descriptions),
-            "toolset_with_mandate": content_hash({"toolset": self.toolset, "mandate": self.mandate}),
-            "document_distribution": content_hash(self.distribution_id),
-            "validity_period": content_hash(self.validity),
+            "implementation": content_hash(self.implementation),
+            "configuration": content_hash(self.configuration),
         }
 
     @computed_field
     @property
     def id(self) -> str:
-        return content_hash({k: v for k, v in self.component_hashes.items()
-                             if k != "validity_period"})
+        return content_hash(self.component_hashes)
+
+
+class EnvironmentDefinition(FrozenModel):
+    """External conditions, tools and enforcement, bound to a measurement."""
+
+    name: str = "return-values"
+    implementation: dict[str, Any] = Field(default_factory=lambda: {"version": "1"})
+    tool_descriptions: dict[str, Any] = Field(default_factory=dict)
+    configuration: dict[str, Any] = Field(default_factory=dict)
+    mandate: dict[str, Any] = Field(default_factory=dict)
 
     @computed_field
     @property
-    def binding_id(self) -> str:
-        return content_hash({"function_id": self.id, "validity": self.validity})
+    def id(self) -> str:
+        return content_hash(self.model_dump(mode="json", exclude_computed_fields=True))
+
+
+class GraderDefinition(FrozenModel):
+    name: str
+    version: str
+    components: dict[str, Any]
+
+    @computed_field
+    @property
+    def id(self) -> str:
+        return content_hash(self.model_dump(mode="json", exclude_computed_fields=True))
 
 
 class Hazard(FrozenModel):
@@ -193,9 +215,9 @@ class Hazard(FrozenModel):
 
 class Episode(FrozenModel):
     id: str
-    input: dict[str, Any]
-    environment: dict[str, Any]
-    construction: dict[str, Any]
+    input: Any
+    environment: dict[str, Any] = Field(default_factory=dict)
+    construction: dict[str, Any] = Field(default_factory=dict)
     label: Label
     hazards: tuple[Hazard, ...] = ()
     ground_truth: dict[str, Any]
@@ -248,9 +270,8 @@ class Action(FrozenModel):
 
 
 class Outcome(FrozenModel):
-    payments: tuple[Action, ...] = ()
-    emails: tuple[Action, ...] = ()
-    held: bool = False
+    value: Any = None
+    actions: tuple[Action, ...] = ()
     escalated: bool = False
     state: dict[str, Any] = Field(default_factory=dict)
 
@@ -284,6 +305,7 @@ class Grades(FrozenModel):
     outcome: OutcomeGrade
     events: tuple[Event, ...]
     process: ProcessGrade
+    metrics: dict[str, float] = Field(default_factory=dict)
 
 
 class Trial(FrozenModel):
@@ -305,13 +327,21 @@ class ConfirmatoryComparison(FrozenModel):
     margin: float = Field(ge=0)
     maximum_severity: float | None = Field(default=None, gt=0)
     confirmatory: bool = True
+    direction: Literal["higher", "lower"] | None = None
+    unit: str | None = None
+    value_bounds: tuple[float, float] | None = None
 
     @model_validator(mode="after")
     def supported_metric(self) -> ConfirmatoryComparison:
-        if self.metric != "correct" and not self.metric.startswith("loss:"):
-            raise ValueError("Registered comparisons use correct or loss:<harm>; harm margins are currency per 10,000")
-        if self.metric == "loss:":
-            raise ValueError("A loss comparison must name its harm class")
+        standard = {"correct", "cost", "latency_ms", "tokens", "steps", "retries", "schema_valid", "field_f1"}
+        if self.metric not in standard and not self.metric.startswith(("loss:", "metric:")):
+            raise ValueError("Use a process/outcome metric, loss:<harm>, or metric:<custom_name>")
+        if self.metric in {"loss:", "metric:"}:
+            raise ValueError("A comparison must name its metric")
+        if self.metric.startswith("metric:") and (self.direction is None or self.unit is None):
+            raise ValueError("Custom metric comparisons require an explicit direction and unit")
+        if self.value_bounds and self.value_bounds[0] >= self.value_bounds[1]:
+            raise ValueError("Metric lower bound must be below its upper bound")
         return self
 
 
@@ -344,13 +374,9 @@ class MeasurementConfig(FrozenModel):
     prepost_plan: ComparisonPlan | None = None
     calibration_target_residual_loss: float | None = Field(default=None, ge=0)
     mode: Literal["simulation", "real"] = "simulation"
-    grader_version: str = "signal-graders-v1"
-    include_controls: bool = True
 
     @model_validator(mode="after")
     def controls_required(self) -> MeasurementConfig:
-        if not self.include_controls:
-            raise ValueError("Both trivial controls are required in every measurement")
         if self.prepost_plan and self.confirmatory_comparisons:
             raise ValueError("Use one pre/post plan for the entire confirmatory family, not separate comparison declarations")
         for assumption in self.severity_assumptions.values():
@@ -360,8 +386,13 @@ class MeasurementConfig(FrozenModel):
 
 
 class Measurement(FrozenModel):
+    schema_version: Literal["2"] = "2"
     functions: tuple[Function, ...]
-    distribution: DocumentDistribution
+    distribution: TaskDistribution
+    environment: EnvironmentDefinition
+    graders: GraderDefinition
+    validity: ValidityPeriod | None = None
+    control_ids: tuple[str, ...] = ()
     episodes: tuple[Episode, ...]
     trials: tuple[Trial, ...]
     timestamp: datetime
@@ -383,10 +414,10 @@ class Measurement(FrozenModel):
             raise ValueError("A measurement must bind passing self-validation evidence")
         if self.config.prepost_plan and self.config.prepost_plan.declared_at > self.timestamp:
             raise ValueError("A comparison plan must be declared before measurement")
-        if any(f.distribution_id != self.distribution.id for f in self.functions):
-            raise ValueError("Every function must be bound to the measured distribution")
-        if any(not f.validity.start <= self.timestamp < f.validity.end for f in self.functions):
-            raise ValueError("Measurement timestamp is outside a function validity period")
+        if self.validity and not self.validity.start <= self.timestamp < self.validity.end:
+            raise ValueError("Measurement timestamp is outside its validity period")
+        if not set(self.control_ids) <= function_ids:
+            raise ValueError("Control identities must belong to the measured crossing")
         expected = {(e, f, r) for e in episode_ids for f in function_ids
                     for r in range(self.config.repetitions)}
         observed = {(t.episode_id, t.function_id, t.repetition) for t in self.trials}
@@ -407,6 +438,13 @@ class Measurement(FrozenModel):
     @property
     def id(self) -> str:
         return content_hash(self.model_dump(mode="json", exclude_computed_fields=True))
+
+    @computed_field
+    @property
+    def binding_id(self) -> str:
+        return content_hash({"functions": [f.id for f in self.functions],
+                             "distribution": self.distribution.id, "environment": self.environment.id,
+                             "graders": self.graders.id, "validity": self.validity})
 
 
 class AuditSample(FrozenModel):

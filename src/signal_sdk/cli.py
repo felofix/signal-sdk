@@ -10,12 +10,14 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
     validate = sub.add_parser("validate", help="Run simulation PASS/FAIL checks")
     validate.add_argument("--seed", type=int, default=1729)
-    demo = sub.add_parser("demo", help="Run a constructed invoice simulation plus controls")
+    demo = sub.add_parser("demo", help="Run a constructed simulation plus domain controls")
     demo.add_argument("--episodes", type=int, default=48)
     demo.add_argument("--seed", type=int, default=7)
     demo.add_argument("--repetitions", type=int, default=3)
     demo.add_argument("--output", type=Path, default=Path("outputs/demo"))
     demo.add_argument("--no-variants", action="store_true")
+    demo.add_argument("--generic", action="store_true",
+                      help="Run the default return-value domain on an arithmetic book instead of payments")
     report = sub.add_parser("report", help="Generate certificates and HTML from a snapshot")
     report.add_argument("measurement", type=Path)
     report.add_argument("--output", type=Path, default=Path("outputs/report"))
@@ -62,8 +64,9 @@ def main(argv: list[str] | None = None) -> int:
         from .models import Measurement
         from .visualization import export_html
         if args.command == "demo":
-            from .examples import demo
-            measurement = demo(args.episodes, args.seed, args.repetitions, not args.no_variants)
+            from .examples import arithmetic_demo, demo
+            measurement = (arithmetic_demo(args.episodes, args.seed, args.repetitions) if args.generic
+                           else demo(args.episodes, args.seed, args.repetitions, not args.no_variants))
         else:
             measurement = Measurement.model_validate_json(args.measurement.read_text())
         args.output.mkdir(parents=True, exist_ok=True)

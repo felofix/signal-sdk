@@ -88,6 +88,11 @@ def _tokens(value: Any) -> str:
     return "unreported" if value is None else f"{value:.1f}"
 
 
+def _function_label(function: Any) -> str:
+    models = ", ".join(f"{m.provider}/{m.name}@{m.version}" for m in function.model_identities)
+    return f"{function.name} ({models})" if models else function.name
+
+
 def _step_html(step: Any, offset_ms: float, total_ms: float) -> str:
     left = min(100.0, max(0.0, offset_ms / total_ms * 100))
     width = min(100.0 - left, max(0.4, step.duration_ms / total_ms * 100))
@@ -173,7 +178,7 @@ def _trial_html(trial: Trial, ordinal: int) -> str:
       <section><h3>Outcome</h3><dl><dt>Correct final state</dt><dd>{outcome.correct}</dd>
       <dt>Field F1</dt><dd>{outcome.field_f1:.3f}</dd><dt>Impossible escalated</dt>
       <dd>{_escape(outcome.impossible_escalated)}</dd></dl>
-      <details><summary>Environment after trial</summary><pre>{_json(trial.outcome)}</pre></details></section>
+      <details><summary>Outcome after trial</summary><pre>{_json(trial.outcome)}</pre></details></section>
       <section><h3>Process</h3><dl><dt>Schema valid</dt><dd>{process.schema_valid}</dd>
       <dt>Steps / retries</dt><dd>{process.steps} / {process.retries}</dd>
       <dt>Tokens</dt><dd>{process.tokens}</dd><dt>Recorded cost</dt><dd>{_money(process.cost)}</dd>
@@ -240,7 +245,7 @@ def html_document(measurement: Measurement) -> str:
                 ordinal += 1
         cells.append(f"""<section class="cell" data-function="{_escape(graph.function_id)}"
           data-episode="{_escape(graph.episode_id)}"><h2>{_escape(graph.episode_id)}</h2>
-          <div>{_escape(function.model.name)} <span class="muted">{_escape(function.model.version)}</span></div>
+          <div>{_escape(_function_label(function))}</div>
           <p class="identity">{_escape(graph.function_id)}</p>
           <div class="cell-summary"><span>Correct final state: {graph.correct}/{graph.trials} trials</span>
           <span>Recorded cost: {_money(graph.recorded_cost)}</span>
@@ -250,7 +255,7 @@ def html_document(measurement: Measurement) -> str:
           <th>Present</th><th>Mean latency</th><th>Mean tokens</th></tr></thead>
           <tbody>{''.join(rows)}</tbody></table></div>{''.join(trials_html)}</section>""")
     function_options = "".join(
-        f'<option value="{_escape(f.id)}">{_escape(f.model.name)} / {_escape(f.model.version)} / {_escape(f.id[:12])}</option>'
+        f'<option value="{_escape(f.id)}">{_escape(_function_label(f))} / {_escape(f.id[:12])}</option>'
         for f in measurement.functions
     )
     episode_options = "".join(

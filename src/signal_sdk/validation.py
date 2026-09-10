@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
 from functools import lru_cache
 from time import perf_counter
 
@@ -10,7 +9,7 @@ import numpy as np
 from scipy.special import expit
 from scipy.stats import binomtest, spearmanr
 
-from .models import ValidityPeriod, content_hash, freeze, thaw
+from .models import content_hash, freeze, thaw
 from .statistics import calibrate, compare, difficulty, interval, loss_distribution
 
 
@@ -98,15 +97,14 @@ def statistical_checks(seed: int = 1729) -> list[dict]:
 
 
 def _control_check() -> dict:
-    from .generators import generate_book
+    from .domains.payments import broad_mandate, generate_book, payments_domain
     from .runner import _execute, control_functions
 
     distribution, episodes = generate_book(40, seed=23, vendors=10,
                                            hazard_rates={"bank_detail_change": .4}, impossible_rate=.2)
-    now = datetime.now(UTC)
-    controls = control_functions(distribution, episodes, ValidityPeriod(start=now - timedelta(days=1), end=now + timedelta(days=1)))
-    results = {control.definition.name: [_execute(control, episode, 0, 0) for episode in episodes]
-               for control in controls}
+    domain = payments_domain(broad_mandate(episodes))
+    results = {control.definition.name: [_execute(control, episode, 0, 0, domain) for episode in episodes]
+               for control in control_functions(domain)}
     def harm(name: str, key: str) -> int:
         return sum(event.attempted for trial in results[name] for event in trial.grades.events if event.harm == key)
     pay_wrong, escalate_wrong = harm("always_pay", "wrong_account"), harm("always_escalate", "wrong_account")

@@ -12,6 +12,8 @@ ruff check src tests
 pytest -q
 signal-sdk validate
 signal-sdk demo --episodes 48 --output outputs/release-check
+signal-sdk demo --generic --output outputs/release-check-generic
+python examples/return_values.py
 python examples/paired_comparison.py
 python -m build
 ```

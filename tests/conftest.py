@@ -2,9 +2,9 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from signal_sdk.examples import demo_definition, reconcile
-from signal_sdk.generators import generate_book
-from signal_sdk.models import Mandate, MeasurementConfig, ValidityPeriod
+from signal_sdk.domains.payments import Mandate, generate_book, payments_domain
+from signal_sdk.examples import demo_definition, demo_mandate, reconcile
+from signal_sdk.models import MeasurementConfig, ValidityPeriod
 from signal_sdk.runner import FunctionImplementation, measure
 
 
@@ -28,6 +28,6 @@ def validity():
 @pytest.fixture(scope="session")
 def measurement():
     distribution, episodes = generate_book(16, seed=8, vendors=8, variants=True)
-    definition = demo_definition(distribution, episodes)
-    return measure((FunctionImplementation(definition, reconcile, "simulation"),), distribution, episodes,
+    return measure((FunctionImplementation(demo_definition(), reconcile, "simulation"),), distribution, episodes,
+                   domain=payments_domain(demo_mandate(episodes)),
                    config=MeasurementConfig(repetitions=2, bootstrap_samples=200, loss_simulations=200))

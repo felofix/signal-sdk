@@ -25,15 +25,17 @@ class RiskCertificate(FrozenModel):
 
 
 def limitations(measurement: Measurement, function_id: str) -> list[str]:
-    function = next(f for f in measurement.functions if f.id == function_id)
     missing = sum(t.grades.process.cost is None for t in measurement.trials if t.function_id == function_id)
+    period = (f" during {measurement.validity.start.isoformat()} to {measurement.validity.end.isoformat()}"
+              if measurement.validity else "; no validity period was declared")
     lines = [
-        f"This snapshot applies only to function {function.id} on distribution {measurement.distribution.id} "
-        f"during {function.validity.start.isoformat()} to {function.validity.end.isoformat()}.",
+        f"This snapshot applies only to function {function_id} on distribution {measurement.distribution.id} "
+        f"in environment {measurement.environment.id} under graders {measurement.graders.id}{period}.",
         "A model update at the provider invalidates this certificate, even if the public model name stays the same. Re-measure with a pinned provider version.",
-        "Changing prompts, tool descriptions, the toolset, its mandate, the document distribution, or the validity period requires a new measurement.",
+        "Changing the function (models, prompts, implementation, configuration) makes a new function. Changing the environment, its tools or mandate, the task distribution, the graders, or the period requires a new measurement.",
         f"Severity is assumed. Configured severity distributions: {json.dumps(thaw(measurement.config.severity_assumptions), sort_keys=True)}.",
-        f"The attack suite {measurement.distribution.attack_suite_version} gives a lower bound on attack exposure; untested attacks are outside this measurement.",
+        (f"The attack suite {measurement.distribution.attack_suite_version} gives a lower bound on attack exposure; untested attacks are outside this measurement."
+         if measurement.distribution.attack_suite_version else "No attack suite was injected; this measurement says nothing about adversarial inputs."),
         "The unit is the episode. Repetitions are dependent; top-level clusters are assumed exchangeable and independent. Shared effects across declared clusters invalidate these intervals.",
         "Confidence intervals use a top-cluster bootstrap with a cluster-t envelope and conservative bounded-sample guards. Coverage is approximate, especially with few clusters.",
         "Difficulty and loss predictions depend on printed model and severity assumptions. A 95% posterior interval is not a frequentist coverage guarantee.",
@@ -78,21 +80,25 @@ def certificates(measurement: Measurement) -> tuple[RiskCertificate, ...]:
         prediction = hard.get("predictions", {}).get(fid)
         model_version_errors = [t.error for t in selected if t.error and "provider version" in t.error.lower()]
         status = "simulation" if config.mode == "simulation" else "measured"
-        if function.model.provider == "signal" and function.name in {"always_pay", "always_escalate"}:
+        if fid in measurement.control_ids:
             status = "control"
         if model_version_errors:
             status = "invalid_provider_version"
         elif any(t.error for t in selected):
             status = "execution_errors_present"
         reports.append(RiskCertificate(measurement_id=measurement.id, function_id=fid,
-            status=status, columns={key: stats[key] for key in ("outcome", "events", "process")},
+            status=status, columns={key: stats[key] for key in ("outcome", "events", "process", "metrics")},
             sections=(
                 {"title": "Function identity", "data": function.model_dump(mode="json")},
-                {"title": "Document distribution", "data": measurement.distribution.model_dump(mode="json")},
-                {"title": "Validity and re-measurement", "data": {"period": thaw(function.validity),
+                {"title": "Task distribution", "data": measurement.distribution.model_dump(mode="json")},
+                {"title": "Environment and graders", "data": {"environment": measurement.environment.model_dump(mode="json"),
+                    "graders": measurement.graders.model_dump(mode="json")}},
+                {"title": "Validity and re-measurement", "data": {"period": thaw(measurement.validity),
                     "measurement_timestamp": measurement.timestamp.isoformat(),
-                    "triggers": ["provider model update", "prompt change", "tool description change", "toolset or mandate change", "distribution change", "period expiry"]}},
+                    "triggers": ["provider model update", "prompt change", "implementation or configuration change",
+                                 "environment, tool or mandate change", "distribution change", "grader change", "period expiry"]}},
                 {"title": "Harm classes", "data": stats["events"]},
+                {"title": "Custom metrics", "data": stats["metrics"]},
                 {"title": "Loss per 10,000 episodes", "data": loss},
                 {"title": "Book difficulty", "data": {"label_counts": dict(labels),
                     "outcome": stats["outcome"], "mixed_model": {k: v for k, v in hard.items() if k not in {"empirical_difficulty", "predictions"}},
@@ -101,7 +107,8 @@ def certificates(measurement: Measurement) -> tuple[RiskCertificate, ...]:
                 {"title": "Calibration", "data": calibration},
                 {"title": "Robustness", "data": robust["functions"][fid]},
                 {"title": "Injection by vector", "data": {"rates": injection,
-                    "scope": f"Measured against the specific suite {measurement.distribution.attack_suite_version}, not all attacks."}},
+                    "scope": (f"Measured against the specific suite {measurement.distribution.attack_suite_version}, not all attacks."
+                              if measurement.distribution.attack_suite_version else "No attack suite was injected in this distribution.")}},
                 {"title": "What this measurement does not say", "data": limitations(measurement, fid)},
                 {"title": "Hours and cost spent", "data": {
                     "measurement_wall_hours": measurement.elapsed_seconds / 3600,
@@ -131,6 +138,8 @@ def compare_measurements(pre: Measurement, post: Measurement) -> dict:
     """Compare the same episodes as pairs, using a plan bound before execution."""
     if pre.distribution.id != post.distribution.id or content_hash(pre.episodes) != content_hash(post.episodes):
         raise ValueError("Pre/post comparisons require identical episode contents and distribution")
+    if pre.environment.id != post.environment.id or pre.graders.id != post.graders.id:
+        raise ValueError("Pre/post comparisons require the same environment and graders")
     if pre.timestamp > post.timestamp:
         raise ValueError("Pre measurement must precede post measurement")
     if pre.config.repetitions != post.config.repetitions:
@@ -177,8 +186,11 @@ def markdown(certificate: RiskCertificate) -> str:
         lines.extend([f"## {section['title']}", ""])
         data = thaw(section["data"])
         if section["title"] == "Harm classes":
-            lines.extend(["| Harm | Attempted trials | Occurred trials | Attempt rate [interval] | Occurrence rate [interval] |",
-                          "|---|---:|---:|---|---|"])
+            if not data:
+                lines.extend(["No harm graders are defined in this domain; only outcome and process were measured.", ""])
+            else:
+                lines.extend(["| Harm | Attempted trials | Occurred trials | Attempt rate [interval] | Occurrence rate [interval] |",
+                              "|---|---:|---:|---|---|"])
             for name, event in data.items():
                 lines.append(f"| {name} | {event['attempted_trials']} | {event['occurred_trials']} | {_rate(event['attempts'])} | {_rate(event['occurrences'])} |")
             lines.append("")
@@ -186,12 +198,23 @@ def markdown(certificate: RiskCertificate) -> str:
                 note = event["attempts"].get("zero_event_note")
                 if note:
                     lines.extend([f"{name}: {note}", ""])
+        elif section["title"] == "Custom metrics":
+            if not data:
+                lines.extend(["No custom metrics are defined in this domain.", ""])
+            else:
+                lines.extend(["| Metric | Estimate [interval] |", "|---|---|"])
+                lines.extend(f"| {k} | {_rate(v)} |" for k, v in data.items())
+                lines.append("")
         elif section["title"] == "Function identity":
-            lines.extend([f"Name: **{data['name']}**", "",
-                          f"Model: `{data['model']['provider']}/{data['model']['name']}`; pinned version `{data['model']['version']}`.", "",
+            models = [data["model"]] if data.get("model") else data.get("models", [])
+            lines.extend([f"Name: **{data['name']}**", ""])
+            lines.extend(f"Model: `{m['provider']}/{m['name']}`; pinned version `{m['version']}`." for m in models)
+            if not models:
+                lines.append("No model identity declared (a control or a model-free implementation).")
+            lines.extend(["", f"Implementation: `{json.dumps(data['implementation'], sort_keys=True)}`", "",
                           "| Component | SHA-256 |", "|---|---|"])
             lines.extend(f"| {k} | `{v}` |" for k, v in data["component_hashes"].items())
-            lines.extend(["", f"Period binding: `{data['binding_id']}`", ""])
+            lines.append("")
         elif section["title"] == "Loss per 10,000 episodes":
             lines.extend(["| Harm | Mean | 95th percentile | 99th percentile | Expected-loss interval |",
                           "|---|---:|---:|---:|---|"])

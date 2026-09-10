@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "signal-risk-sdk"
-version = "0.1.0"
+version = "0.2.0"
 description = "Constructed-function risk measurement with deterministic graders and clustered statistics"
 readme = "README.md"
 requires-python = ">=3.11"

@@ -195,6 +195,8 @@ def summarize(rows: Rows, *, bootstrap_samples: int = 2000, seed: int = 0) -> di
                         "impossible_escalated": estimate_metric([r for r in selected if r["label"] == "impossible"], "impossible_escalated", samples=bootstrap_samples, seed=seed),
                         "conditional_on_label": {label: estimate_metric([r for r in selected if r["label"] == label], "correct", samples=bootstrap_samples, seed=seed) for label in labels}},
             "events": events, "process": process, "consistency": consistency,
+            "metrics": {name.removeprefix("metric:"): estimate_metric(selected, name, samples=bootstrap_samples, seed=seed)
+                        for name in sorted({k for r in selected for k in r if k.startswith("metric:")})},
         }
     return {"functions": result, "unit": "episode", "resampling_unit": "top_level_cluster"}
 
@@ -226,7 +228,8 @@ def compare(rows: Rows, reference_id: str, candidate_id: str, *, comparisons: Se
         confirmatory = bool(config.get("confirmatory", False))
         alpha = .05 / max(1, family_size) if confirmatory else .05
         scale = 10000 if metric.startswith("loss:") else 1
-        sign = 1 if metric == "correct" else -1
+        higher_is_better = metric in {"correct", "field_f1", "schema_valid"} or config.get("direction") == "higher"
+        sign = 1 if higher_is_better else -1
         differences, clusters = [], []
         for episode in sorted(reference):
             left = sorted(reference[episode], key=lambda r: (r["repetition"], r["seed"]))
@@ -236,7 +239,10 @@ def compare(rows: Rows, reference_id: str, candidate_id: str, *, comparisons: Se
                 raise ValueError(f"Paired metric {metric} has missing observations")
             differences.append(float(np.mean([sign * (b - a) * scale for a, b in pairs])))
             clusters.append(str(left[0]["cluster"]))
-        bounds = (-1., 1.) if metric == "correct" or metric.startswith(("attempts:", "occurrences:")) else None
+        bounds = (-1., 1.) if metric in {"correct", "field_f1", "schema_valid"} or metric.startswith(("attempts:", "occurrences:")) else None
+        if config.get("value_bounds"):
+            low_bound, high_bound = map(float, config["value_bounds"])
+            bounds = (low_bound - high_bound, high_bound - low_bound)
         if metric.startswith("loss:") and config.get("maximum_severity") is not None:
             bound = float(config["maximum_severity"]) * scale
             if not isfinite(bound) or bound <= 0:
@@ -260,7 +266,7 @@ def compare(rows: Rows, reference_id: str, candidate_id: str, *, comparisons: Se
         if confirmatory:
             conclusion = "non_inferior" if low is not None and low > -float(margin) else "not_established"
         reports.append({"name": config["name"], "metric": metric, "advantage": report,
-                        "margin": margin, "units": "currency_per_10000_episodes" if scale == 10000 else "rate",
+                        "margin": margin, "units": config.get("unit") or ("currency_per_10000_episodes" if scale == 10000 else "rate"),
                         "confirmatory": confirmatory, "conclusion": conclusion})
     return {"reference_function_id": reference_id, "candidate_function_id": candidate_id,
             "comparison_kind": "different_functions", "paired": True,

@@ -1,4 +1,4 @@
-"""Deliberately trivial controls that expose outcome and harm tradeoffs."""
+"""Optional payment controls; never injected into general measurements."""
 
 from __future__ import annotations
 

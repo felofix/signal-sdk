@@ -7,7 +7,7 @@ import json
 import random
 from typing import Any, Mapping
 
-from .models import DocumentDistribution, Episode, Hazard, Label, content_hash, thaw
+from signal_sdk.models import Episode, Hazard, Label, TaskDistribution, thaw
 
 
 ATTACK_SUITE_VERSION = "signal-payments-1"
@@ -47,7 +47,7 @@ def distribution_parameters(
         raise ValueError("vendors and templates must be positive")
     if not 0 <= impossible_rate <= 1 or any(not 0 <= value <= 1 for value in rates.values()):
         raise ValueError("Hazard and impossible rates must lie in [0, 1]")
-    return {"generator": "signal_sdk.generators.generate_episodes", "version": 1,
+    return {"generator": "signal_sdk.domains.payments.generate_episodes", "version": 1,
             "seed": seed, "vendors": vendors, "templates": templates,
             "impossible_rate": impossible_rate, "hazard_rates": rates,
             "label_rule": LABEL_RULE, "attack_suite_version": ATTACK_SUITE_VERSION,
@@ -155,10 +155,10 @@ def cosmetic_variants(episode: Episode) -> tuple[Episode, ...]:
 
 
 def generate_book(count: int, seed: int = 0, *, variants: bool = False,
-                  **parameters: Any) -> tuple[DocumentDistribution, tuple[Episode, ...]]:
+                  **parameters: Any) -> tuple[TaskDistribution, tuple[Episode, ...]]:
     """Construct a reproducible distribution and its episodes together."""
     specification = distribution_parameters(seed, **parameters)
-    distribution = DocumentDistribution(
+    distribution = TaskDistribution(
         name="Constructed invoice book", generator="signal-payments-v1", seed=seed,
         parameters={"count": count, "cosmetic_variants": variants, **specification},
         hazard_rates=specification["hazard_rates"], label_rule=LABEL_RULE,
@@ -169,10 +169,16 @@ def generate_book(count: int, seed: int = 0, *, variants: bool = False,
     return distribution, episodes
 
 
-def dataset_distribution(name: str, episodes: tuple[Episode, ...], *, label_rule: str,
-                         hazard_rates: dict[str, float], attack_suite_version: str,
-                         top_cluster: str = "vendor") -> DocumentDistribution:
-    """Bind an externally constructed book by its complete content hash."""
-    return DocumentDistribution(name=name, dataset_hash=content_hash(episodes),
-                                label_rule=label_rule, hazard_rates=hazard_rates,
-                                attack_suite_version=attack_suite_version, top_cluster=top_cluster)
+def reproduce_book(distribution: TaskDistribution) -> tuple[Episode, ...]:
+    """Regenerate a bound book so the runner can check the episodes were not edited."""
+    if distribution.generator != "signal-payments-v1":
+        raise ValueError("Unknown generator for the payments domain")
+    params = distribution.parameters
+    expected, episodes = generate_book(
+        params["count"], distribution.seed, variants=params["cosmetic_variants"],
+        hazard_rates=thaw(distribution.hazard_rates), vendors=params["vendors"],
+        templates=params["templates"], impossible_rate=params["impossible_rate"],
+    )
+    if expected.id != distribution.id:
+        raise ValueError("Distribution parameters do not reproduce the bound distribution")
+    return episodes

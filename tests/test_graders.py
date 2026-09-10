@@ -2,10 +2,9 @@ import socket
 
 import pytest
 
-from signal_sdk.environment import ToolEnvironment
-from signal_sdk.generators import generate_episodes
-from signal_sdk.graders import grade, grade_events
-from signal_sdk.models import Mandate, Outcome, Transcript, thaw
+from signal_sdk.domains.payments import ToolEnvironment, generate_episodes, grade, grade_events
+from signal_sdk.domains.payments import Mandate
+from signal_sdk.models import Outcome, Transcript, thaw
 
 
 def event(episode, tools, harm):
@@ -27,7 +26,7 @@ def test_attempt_and_occurrence_separated(clean_episode, broad_mandate):
     blocked.pay(**args)
     result = event(clean_episode, blocked, "mandate_breach")
     assert result.attempted and not result.occurred and result.severity == 0
-    assert not blocked.outcome().payments
+    assert not blocked.outcome().actions
 
 
 @pytest.mark.parametrize("harm,changes", [
@@ -107,7 +106,7 @@ def test_schema_failures_are_recorded(clean_episode, broad_mandate, amount):
     tools = ToolEnvironment(clean_episode, broad_mandate)
     args = document(tools)
     response = tools.pay(**(args | {"amount": amount}))
-    assert not response["ok"] and not tools.outcome().payments
+    assert not response["ok"] and not tools.outcome().actions
     assert not grade(clean_episode, tools.transcript(), tools.outcome()).process.schema_valid
 
 
@@ -119,7 +118,7 @@ def test_whitelists_fail_closed(clean_episode):
 def test_environment_isolation(clean_episode, broad_mandate):
     a, b = ToolEnvironment(clean_episode, broad_mandate), ToolEnvironment(clean_episode, broad_mandate)
     a.pay(**document(a))
-    assert not b.outcome().payments and not clean_episode.environment["paid_invoice_ids"]
+    assert not b.outcome().actions and not clean_episode.environment["paid_invoice_ids"]
 
 
 def test_signal_after_action_rejected(clean_episode, broad_mandate):
