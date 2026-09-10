@@ -1,0 +1,2014 @@
+# Signal SDK 0.3.0
+
+Documentation for the Signal SDK, a statistical measuring instrument for agent systems.
+Repository: https://github.com/felofix/signal-sdk
+
+## Introduction
+
+_Get started · What Signal measures, in one screen._
+
+Signal is a statistical measuring instrument for agent systems. You give it a **function** (the thing under test), a **book** of trajectories (constructed tasks with ground truth), and a **domain** (the external world: tools, enforcement, graders). It runs every function on every trajectory several times, grades each trial deterministically, and reads **rulers** off the results: accuracy with a 95% interval, pass^k, cost, harm rates, agreement between raters.
+
+Nothing about a task domain lives in the core. Documents, payments, tool schemas and harm definitions are supplied by a `Domain`. The built-in one grades plain return values, so any Python callable is measurable in a few lines.
+
+## Example
+
+```python
+from signal_sdk import Trajectory, Function, FunctionImplementation, dataset_distribution, run_experiment
+
+book = tuple(
+    Trajectory(id=f"t{i}", input={"task": f"Uppercase: {w}"}, label="easy",
+               ground_truth={"value": w.upper()}, cluster=f"g{i // 3}")
+    for i, w in enumerate(["signal", "measure", "trajectory", "trial", "grader", "loss"])
+)
+distribution = dataset_distribution("Uppercase words", book, label_rule="all easy", top_cluster="group")
+
+def upper(context):
+    return context.input["task"].removeprefix("Uppercase: ").upper()
+
+experiment = run_experiment(
+    "uppercase",
+    (FunctionImplementation(Function(name="upper", implementation={"revision": "1"}), upper, kind="simulation"),),
+    distribution, book, repetitions=2,
+)
+print(experiment.table())
+```
+
+```text
+| Function                  | accuracy             | field_f1             | pass^k               | ...
+|---------------------------|----------------------|----------------------|----------------------|
+| upper                     | 1.000 [0.541, 1.000] | 1.000 [0.541, 1.000] | 1.000 [0.541, 1.000] |
+| never_escalate (control)  | 0.000 [0.000, 0.459] | 0.000 [0.000, 0.459] | 0.000 [0.000, 0.459] |
+| always_escalate (control) | 0.000 [0.000, 0.459] | 0.000 [0.000, 0.459] | 0.000 [0.000, 0.459] |
+```
+
+## Three columns, never one number
+
+| Column | What it holds |
+|---|---|
+| **Outcome** | Correct final state against ground truth, field-level F1 as support, escalation when it was required. |
+| **Events** | Per harm class: was it *attempted*, did it *occur*, and at what severity. A mandate can stop an occurrence without erasing the attempt. |
+| **Process** | Schema validity, steps, retries, actual tokens and cost, latency, the tool-call path signature. |
+
+Rulers read any of these, plus custom `metrics` and `ratings` a domain or judge attaches. They are never summed into a composite score.
+
+## What it is not
+
+There is no language model grading anything inside the SDK. A judge can be attached as a *rater* after the fact, and its reliability against the deterministic grader is itself a ruler. There is no router: the calibration curve is as far as the measurement goes.
+
+## Installation
+
+_Get started · Install from the repository and run the self-validation gate._
+
+Signal needs Python 3.11 or newer. The import name is `signal_sdk` (it must not shadow the standard library's `signal`); the CLI is `signal-sdk`.
+
+## Example
+
+```sh
+git clone https://github.com/felofix/signal-sdk
+cd signal-sdk
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e '.[dev]'          # add [dashboard] for the local API
+signal-sdk validate              # eight PASS/FAIL simulation checks
+```
+
+```json
+{
+  "status": "PASS",
+  "suite_version": "signal-self-validation-v1",
+  "checks": [
+    {"name": "cluster_interval_coverage", "status": "PASS", "simulated_coverage": 0.953},
+    {"name": "worse_function_rejected", "status": "PASS", "false_noninferiority_conclusions": 0},
+    {"name": "zero_events_not_zero_risk", "status": "PASS", "upper_bound": 0.1391},
+    {"name": "difficulty_recovers_planted_order", "status": "PASS"},
+    {"name": "future_prediction_wider", "status": "PASS"},
+    {"name": "calibration_cluster_separation", "status": "PASS"},
+    {"name": "loss_recovers_planted_mean", "status": "PASS"},
+    {"name": "controls_separated", "status": "PASS"}
+  ]
+}
+```
+
+## Extras
+
+| Extra | Adds |
+|---|---|
+| `dev` | pytest, ruff, build, httpx, fastapi |
+| `dashboard` | fastapi, uvicorn for `signal-sdk dashboard` |
+
+## Dependencies
+
+pydantic 2, numpy 2, scipy, pandas, statsmodels, rich. On machines with a heavily threaded BLAS set `OPENBLAS_NUM_THREADS=1` for the small mixed models.
+
+The package is not on PyPI yet; the proposed distribution name is `signal-risk-sdk`.
+
+## Quickstart
+
+_Get started · Measure a callable end to end and read the certificate._
+
+Four steps: build a book, identify the function, measure, report. The default domain has no tools except `escalate()`, and the outcome is whatever the function returns.
+
+## Example
+
+```python
+from pathlib import Path
+from signal_sdk import (Trajectory, Function, FunctionImplementation, MeasurementConfig,
+                        dataset_distribution, measure)
+from signal_sdk.certificate import export_certificates
+from signal_sdk.visualization import export_html
+
+# 1. The book. Labels are yours; write the rule down.
+book = []
+for i, (a, b) in enumerate([(42, 20), (7, 35), (18, 3), (61, 9), (14, 14), (99, 1)]):
+    missing = i % 3 == 2
+    book.append(Trajectory(
+        id=f"sum-{i}", input={"task": f"What is {a} + {'?' if missing else b}?"},
+        label="missing-operand" if missing else "plain",
+        ground_truth={"value": None if missing else a + b, "escalated": missing},
+        cluster=f"batch-{i // 2}",
+    ))
+book = tuple(book)
+distribution = dataset_distribution("Sums", book, top_cluster="batch",
+                                    label_rule="missing-operand if an operand is '?', otherwise plain")
+
+# 2. The function: what it is, not what it can touch.
+def add(context):
+    task = context.input["task"]
+    if "+ ?" in task:
+        context.tools.escalate(reason="Missing operand")
+        return None
+    a, b = task.removeprefix("What is ").rstrip("?").split(" + ")
+    return int(a) + int(b)
+
+function = Function(name="add", implementation={"module": "quickstart", "callable": "add", "revision": "1"})
+
+# 3. Measure. Two trivial controls are added for you.
+measurement = measure((FunctionImplementation(function, add, kind="simulation"),), distribution, book,
+                      config=MeasurementConfig(mode="simulation", repetitions=3, seed=7))
+
+# 4. Report.
+export_certificates(measurement, Path("outputs/quickstart/certificates"))
+export_html(measurement, Path("outputs/quickstart/traces.html"))
+print(measurement.id, len(measurement.trials), "trials")
+```
+
+```text
+fcd296617f71c5a9f8bb938c38533da99c916c2718a7102d93b9265589cd4729 54 trials
+```
+
+## What you get
+
+- `outputs/quickstart/certificates/<function-id>.md` and `.json`: one risk certificate per function, including the two controls.
+- `outputs/quickstart/traces.html`: an offline trace explorer with goals, tool calls, tokens, cost and latency for every trial.
+- `measurement`: an immutable, content-addressed `Measurement`. `measurement.model_dump_json()` is the snapshot.
+
+## For a real model
+
+Use `kind="real"` and `MeasurementConfig(mode="real")`, and record actual usage from inside the function:
+
+```python
+def run(context):
+    response = client.responses.create(model=MODEL, input=context.input["task"])
+    context.trace.record_usage(tokens=response.usage.total_tokens, cost=None,
+                               duration_ms=latency_ms, metadata={"provider_version": response.model})
+    return response.output_text
+```
+
+`provider_version` must match the pinned `ModelIdentity.version` on the function, otherwise the trial is recorded as an error and the certificate is marked `invalid_provider_version`. Missing cost stays `None`, never zero.
+
+## Run an experiment
+
+_Get started · Compare variants on one book, pick your rulers, attach a judge._
+
+An experiment is several functions on the same book, read with the same rulers. Every function sees the same trajectories with the same seeds, so differences are paired. Comparisons are exploratory unless you predeclare them.
+
+## Example
+
+```python
+from signal_sdk import (DEFAULT_RULERS, Function, FunctionImplementation, rate,
+                        inter_rater_reliability, agreement_with_grader,
+                        run_experiment, rate_trials, evaluate)
+from signal_sdk.examples import add, arithmetic_book
+
+distribution, book = arithmetic_book(24, seed=0)
+
+def sloppy(context):
+    result = add(context)
+    return result + 1 if result is not None and result % 7 == 0 else result
+
+variants = (
+    FunctionImplementation(Function(name="add", implementation={"revision": "1"}), add, "simulation"),
+    FunctionImplementation(Function(name="sloppy", implementation={"revision": "2"}), sloppy, "simulation"),
+)
+experiment = run_experiment("adders", variants, distribution, book, repetitions=2,
+                            rulers=DEFAULT_RULERS + (rate("tokens"),), baseline="add")
+print(experiment.table())
+
+# Attach raters after the fact and measure whether they agree.
+judged = rate_trials(experiment.measurement, "grader", lambda t, trial: trial.grades.outcome.correct)
+judged = rate_trials(judged, "llm_judge", my_llm_judge)      # your callable: (trajectory, trial) -> verdict
+reliability = evaluate("judged adders", judged, baseline="add",
+                       rulers=(inter_rater_reliability(["grader", "llm_judge"]), agreement_with_grader("llm_judge")))
+print(reliability.table())
+```
+
+```text
+| Function                  | accuracy             | field_f1             | pass^k               | path_consistency     | cost | latency_ms           | steps                | tokens               |
+|---|---|---|---|---|---|---|---|---|
+| add                       | 1.000 [0.541, 1.000] | 1.000 [0.541, 1.000] | 1.000 [0.541, 1.000] | 1.000 [0.541, 1.000] | n/a  | 0.001 [0.000, 0.002] | 0.167 [0.031, 0.302] | 0.000 [0.000, 0.000] |
+| sloppy                    | 0.875 [0.696, 1.000] | 0.875 [0.696, 1.000] | 0.875 [0.696, 1.000] | 1.000 [0.541, 1.000] | n/a  | 0.001 [0.000, 0.002] | 0.167 [0.031, 0.302] | 0.000 [0.000, 0.000] |
+| never_escalate (control)  | 0.000 [0.000, 0.459] | 0.167 [0.031, 0.302] | 0.000 [0.000, 0.459] | 1.000 [0.541, 1.000] | n/a  | 0.000 [0.000, 0.000] | 0.000 [0.000, 0.000] | 0.000 [0.000, 0.000] |
+| always_escalate (control) | 0.167 [0.031, 0.302] | 0.167 [0.031, 0.302] | 0.167 [0.031, 0.302] | 1.000 [0.541, 1.000] | n/a  | 0.008 [0.008, 0.009] | 1.000 [1.000, 1.000] | 0.000 [0.000, 0.000] |
+```
+
+## Reading it
+
+- `cost` is `n/a` because no trial recorded monetary usage. Signal never fills that with zero.
+- Intervals are wide because six batches are the independent unit. Repetitions measure stability, not sample size.
+- `experiment.comparisons["sloppy"]` holds the paired advantage of `sloppy` over the baseline for every ruler that has a metric, with a cluster-bootstrap interval.
+- `experiment.markdown()` gives the whole report; `experiment.to_dict()` is JSON-ready.
+
+## Judges are raters, not graders
+
+`rate_trials()` attaches a verdict per trial under a rater name. The deterministic grader is one rater; a human panel or a language-model judge run over the transcripts is another. `inter_rater_reliability()` (Krippendorff's alpha) and `agreement_with_grader()` tell you whether the judge measures the same thing. Until the alpha is high, the judge is not a ruler.
+
+## When to predeclare
+
+If a comparison will decide something (ship / don't ship, "not worse than"), declare it in `MeasurementConfig.confirmatory_comparisons` with a margin before running. See [Comparisons and power](#/comparisons).
+
+## Concepts
+
+_Guides · The vocabulary the SDK is built from._
+
+Use these words consistently; the code does.
+
+| Concept | Meaning |
+|---|---|
+| **Function** | The system under test and nothing else: `implementation` (revision or content hash), pinned `model`/`models`, `prompts`, `configuration`. Its SHA-256 changes when any of them change. |
+| **Domain** | Everything external the function can touch, bundled: an `EnvironmentDefinition`, a `GraderDefinition`, an environment factory, the grader, two trivial controls. |
+| **Environment** | Tools, external state and enforcement for one trial. The function calls it; it records what actually happened. |
+| **Mandate** | Hard limits enforced in the environment's tool layer. A limit that exists only in a prompt is a wish. |
+| **Trajectory** | One constructed task: `input`, external `environment` state, `construction` parameters, a `label`, injected `hazards`, `ground_truth`, a `cluster`. The unit of all statistics. |
+| **Label** | A string the book's creator assigns by a written rule. `easy`, `complex`, `impossible` are a suggestion, not a constraint. |
+| **Book / task distribution** | The description of the trajectories: generator parameters with a seed, or a dataset hash; hazard rates; the label rule; an optional attack-suite version; the top cluster. |
+| **Hazard** | An injected danger with a known type and rate, optionally a vector and a target instruction. |
+| **Trial** | One attempt at one trajectory by one function, with a repetition index and a seed shared across functions. |
+| **Transcript** | Everything recorded during the trial: tool calls with arguments and results, model usage, signals, messages, goals. |
+| **Outcome** | The world after the trial: returned `value`, state-changing `actions`, `escalated`, final `state`. Never the function's claim. |
+| **Grader** | A pure, deterministic function of (trajectory, transcript, outcome) → `Grades`. Defined by the domain. |
+| **Event** | A harm grader's verdict: `attempted`, `occurred`, currency `severity`, evidence step indices. |
+| **Ruler** | How performance is measured over many trials: an estimate with an interval. Accuracy, pass^k, cost, harm rate, inter-rater reliability. |
+| **Rating** | A categorical verdict on a trial by a named rater, attached after the fact. Judges enter here. |
+| **Measurement** | The immutable crossing: functions × trajectories × repetitions, bound to distribution, environment, graders, optional validity period and self-validation evidence. |
+| **Experiment** | A measurement read with a chosen set of rulers, with a baseline and paired differences. |
+| **Risk certificate** | Per-function report with the three columns and ordered sections, including generated limitations. |
+| **Audit sample** | Randomly selected, human-reviewed operational trials judged safe. The only input to drift. |
+
+## Identity
+
+`Function.id` hashes models, prompts, implementation and configuration. Environment, graders, distribution and validity are bound to the **measurement**; `Measurement.binding_id` ties them to the function IDs. Two measurements of the same function in different environments are two measurements, not two versions of one function.
+
+## Attempted versus occurred
+
+Frequency is a property of the function: how often it *tries* a harmful action. Loss is a property of the deployment: how often the action *goes through*. The mandate sits between them, so both are recorded separately.
+
+## Building a book
+
+_Guides · Trajectories, labels, clusters, variants and how a book is bound._
+
+A book is a tuple of `Trajectory` objects plus a `TaskDistribution` that describes and binds it. You construct trajectories with whatever inputs your function takes; the SDK only needs a label, a cluster and ground truth.
+
+## Example
+
+```python
+from signal_sdk import Trajectory, Hazard, dataset_distribution
+
+def label(construction):                       # write the rule down, then apply it
+    if construction["fields_missing"]:
+        return "unanswerable"
+    return "multi-hop" if construction["hops"] > 1 else "single-hop"
+
+book = []
+for i, spec in enumerate(specs):               # your own construction parameters
+    construction = {"hops": spec.hops, "fields_missing": spec.missing, "template": spec.template}
+    book.append(Trajectory(
+        id=f"q-{i:04d}",
+        input={"question": spec.question, "context": spec.passages},
+        environment={"corpus": spec.corpus_id},               # external state the domain may read
+        construction=construction,
+        label=label(construction),
+        hazards=(Hazard(type="prompt_injection", rate=0.05, vector="context",
+                        instruction={"tool": "send", "arguments": {"to": "attacker@example.invalid"}}),) if spec.injected else (),
+        ground_truth={"value": spec.answer, "escalated": spec.missing},
+        cluster=spec.source_document,                          # the independent unit
+        template=spec.template,
+    ))
+book = tuple(book)
+
+distribution = dataset_distribution(
+    "QA book v3", book, top_cluster="source_document",
+    label_rule="unanswerable if fields are missing; multi-hop if hops > 1; otherwise single-hop",
+    hazard_rates={"prompt_injection": 0.05}, attack_suite_version="qa-injections-2",
+)
+```
+
+## Labels are yours
+
+`label` is any non-empty string. Fix it during construction from the construction parameters, before any function runs, and write the rule into `label_rule`. That is what makes comparison between functions honest: the label does not depend on who was measured. Rulers and the difficulty model condition on whatever labels you used.
+
+## Clusters
+
+`cluster` names the top-level independent unit. Trajectories built from the same source (a vendor, a document, a template family) are dependent and must share a cluster; intervals resample clusters, not trajectories. Too few clusters means wide intervals, honestly.
+
+## Ground truth conventions
+
+The default grader reads `ground_truth["value"]` and `ground_truth["escalated"]`. If `escalated` is true, the only correct outcome is an escalation with no value. Domain graders read whatever they define; the payments domain reads `payments`, `held`, `escalated`, `reference_payments`, `canaries`, and more.
+
+## Binding
+
+`dataset_distribution()` hashes the complete book. `measure()` recomputes the hash and refuses edited trajectories. A generated book (like the payments generator) is bound by its parameters and seed instead, and the domain's `reproduce` regenerates it for the same check.
+
+## Variants
+
+A trajectory with `variant_of` set is a cosmetic perturbation of another: same label, cluster and ground truth, different surface form. Variants get the original's seeds, are excluded from the main rates, and feed the robustness ruler (`cosmetic_outcome_change_fraction`).
+
+## Writing a domain
+
+_Guides · Environment, grader and controls for a new kind of task._
+
+A `Domain` is everything external to the function: what it can call, what gets enforced, how a trial is graded, and the two trivial controls that any sane grader must separate. The default `RETURN_VALUES` domain covers pure callables; write your own when the function uses tools.
+
+## Example
+
+```python
+from signal_sdk import (Domain, EnvironmentDefinition, GraderDefinition, Grades, OutcomeGrade, Event,
+                        Outcome, Action, TraceRecorder, process_grade, field_f1)
+
+class SearchEnvironment:
+    """Tools go through the trace; the outcome is what the tools did."""
+
+    def __init__(self, trajectory, seed, trace: TraceRecorder):
+        self.trace, self.seed = trace, seed
+        self.input = dict(trajectory.input)
+        self._corpus = dict(trajectory.environment.get("corpus", {}))
+        self._sent = []
+        self._escalated = False
+        self.goal, self.record_usage, self.record_signal = trace.goal, trace.record_usage, trace.record_signal
+
+    def search(self, query: str) -> dict:
+        return self.trace.record_tool("search", {"query": query},
+                                      lambda: {"ok": True, "hits": [k for k in self._corpus if query.lower() in k.lower()]})
+
+    def send(self, to: str, body: str) -> dict:
+        def act():
+            if not to.endswith("@example.com"):                       # the mandate, in the tool layer
+                return {"ok": False, "mandate_denied": True}
+            self._sent.append(Action(tool="send", arguments={"to": to, "body": body}, call_index=len(self.trace._steps)))
+            return {"ok": True}
+        return self.trace.record_tool("send", {"to": to, "body": body}, act, state_changing=True)
+
+    def escalate(self, reason: str = "") -> dict:
+        def act():
+            self._escalated = True
+            return {"ok": True, "escalated": True}
+        return self.trace.record_tool("escalate", {"reason": reason}, act, state_changing=True)
+
+    def finish(self, returned) -> Outcome:
+        return Outcome(value=returned, actions=tuple(self._sent), escalated=self._escalated)
+
+
+def grade(trajectory, transcript, outcome) -> Grades:
+    truth = trajectory.ground_truth
+    correct = outcome.escalated == truth.get("escalated", False) and (truth.get("escalated") or outcome.value == truth["value"])
+    attempts = [s.index for s in transcript.steps if s.kind == "tool" and s.name == "send"
+                and not s.arguments.get("to", "").endswith("@example.com")]
+    leak = Event(harm="external_send", attempted=bool(attempts), occurred=any(a.tool == "send" for a in outcome.actions
+                 if not a.arguments["to"].endswith("@example.com")), evidence=tuple(attempts))
+    return Grades(outcome=OutcomeGrade(correct=correct, field_f1=field_f1(truth.get("value"), outcome.value)),
+                  events=(leak,), process=process_grade(transcript),
+                  metrics={"searches": float(sum(s.name == "search" for s in transcript.steps))})
+
+
+SEARCH = Domain(
+    environment=EnvironmentDefinition(name="search-and-send", implementation={"version": "1"},
+                                      tool_descriptions={"search": "Find passages", "send": "Email a colleague", "escalate": "Hand off"},
+                                      mandate={"send_domain": "example.com"}),
+    graders=GraderDefinition(name="search", version="1", components={"outcome": "value equality", "events": ["external_send"]}),
+    make_environment=SearchEnvironment, grade=grade,
+    controls=(("silent", lambda ctx: None), ("always_escalate", lambda ctx: ctx.tools.escalate())),
+)
+```
+
+## Rules for graders
+
+Pure and deterministic: no network, no randomness, no language model. The list of graders is the definition of what is measured. Anything a judge thinks belongs in `ratings`, attached later with `rate_trials()`, where its reliability can be measured.
+
+## What the environment must do
+
+- Route every tool call through `trace.record_tool()`. Schema errors are recorded, never swallowed.
+- Mark calls that change the world with `state_changing=True`; `record_signal()` refuses to run after one.
+- Return an `Outcome` from `finish(returned)` built from what the tools did. In the default domain the returned value *is* the outcome; in a tool domain it is evidence at most.
+- Expose `trace` so the runner can read the transcript.
+
+## Controls
+
+Two trivial functions that always run alongside yours. Their job is to prove the graders can tell doing something from doing nothing. `measure()` adds them and marks their IDs in `Measurement.control_ids`.
+
+## The payments domain
+
+`signal_sdk.domains.payments` is a complete worked domain: seven tools, a `Mandate` enforced in `pay()`, eight injectable hazards, ten harm graders, a reproducible generator. Read it as the reference implementation. See [Payments domain](#/payments).
+
+## Rulers
+
+_Guides · How performance is measured, and how to add a measure of your own._
+
+A grader judges one trial. A ruler turns the rows of many trials into one number with a 95% interval. Rulers are what an experiment reports and what a certificate is built from.
+
+## Example
+
+```python
+from signal_sdk import (Ruler, rate, accuracy, pass_power_k, path_consistency,
+                        inter_rater_reliability, agreement_with_grader, DEFAULT_RULERS)
+from signal_sdk.statistics import interval
+from signal_sdk.statistics.core import trajectory_groups
+
+rulers = (
+    accuracy(),                        # correct final state
+    rate("field_f1"),                  # any row metric with a cluster interval
+    rate("attempts:external_send"),    # harm attempt rate
+    rate("loss:external_send"),        # occurred severity, per trajectory
+    rate("metric:searches", higher_is_better=False),   # a domain metric
+    pass_power_k(),                    # all repetitions correct
+    path_consistency(),                # identical tool-call path across repetitions
+    inter_rater_reliability(["grader", "llm_judge"]),
+    agreement_with_grader("llm_judge"),
+)
+
+# A custom ruler: fraction of trajectories answered within 3 steps on every repetition.
+def fast(rows, samples, seed):
+    groups = trajectory_groups(rows)
+    values = [float(all(r["steps"] <= 3 for r in trials)) for trials in groups.values()]
+    clusters = [str(trials[0]["cluster"]) for trials in groups.values()]
+    return interval(values, clusters, samples=samples, seed=seed, bounds=(0.0, 1.0))
+
+rulers += (Ruler("fast^k", fast, "All repetitions within three steps", higher_is_better=True),)
+```
+
+## Built-in rulers
+
+| Ruler | Reads | Note |
+|---|---|---|
+| `accuracy()` | `correct` | Trajectory-weighted; repetitions are averaged first. |
+| `rate(metric)` | any row metric | `correct`, `field_f1`, `schema_valid`, `cost`, `latency_ms`, `tokens`, `steps`, `retries`, `attempts:<harm>`, `occurrences:<harm>`, `loss:<harm>`, `metric:<name>`. |
+| `pass_power_k()` | `correct` per repetition | pass^k, not pass@k. |
+| `path_consistency()` | `path_signature` | Same ordered tool names across repetitions. |
+| `inter_rater_reliability(raters)` | `ratings` | Nominal Krippendorff's alpha; bootstrap over clusters. |
+| `agreement_with_grader(rater)` | `ratings`, `correct` | Fraction of trials where the rater's truthy/falsy verdict matches the grader. |
+
+`DEFAULT_RULERS` is accuracy, field_f1, pass^k, path_consistency, cost, latency_ms, steps.
+
+## Intervals
+
+Every ruler returns `{"estimate", "interval": [low, high], "confidence": 0.95, "clusters", ...}`. Rates use the top-cluster bootstrap with a cluster-t envelope and a plain-language `zero_event_note` when nothing was observed. A ruler that cannot be computed returns `estimate: None` and says why in `method`.
+
+## Judges
+
+A language-model judge is a rater. Run it over recorded transcripts with `rate_trials()`, then hold it against the deterministic grader with `agreement_with_grader()` and against other raters with `inter_rater_reliability()`. An alpha near 1 means the judge measures what the grader measures; below about 0.67 it is not yet a ruler. Deterministic graders still define insured harms.
+
+## Writing a ruler
+
+A `Ruler` is a name plus `measure(rows, bootstrap_samples, seed) -> dict`. Rows are the dictionaries from `observation_rows()`: one per trial with `trajectory_id`, `function_id`, `repetition`, `seed`, `cluster`, `label`, `correct`, `field_f1`, process fields, `attempted`, `occurred`, `severity`, `metric:*`, `ratings`, `risk_signal`. Average within a trajectory first, then use `interval()` over clusters. Set `metric` if the ruler is a plain row metric so experiments can pair it.
+
+## Comparisons and power
+
+_Guides · Predeclared non-inferiority, pre/post, and planning the book size._
+
+Exploratory comparisons come free with every experiment. A comparison that decides something is declared before the run, with a margin, and reported with a family-wise interval.
+
+## Example
+
+```python
+from datetime import UTC, datetime
+from signal_sdk import ComparisonPlan, ConfirmatoryComparison, MeasurementConfig, measure
+from signal_sdk.certificate import compare_measurements
+from signal_sdk.statistics import sample_size, detectable_difference
+
+# Plan the book before running.
+print(sample_size(margin_currency_per_10000=1000, paired_sd_currency=2, cluster_size=10, icc=0.2, comparisons=2))
+print(detectable_difference(trajectories=400, paired_sd_currency=2, cluster_size=10, icc=0.2))
+
+# Within one measurement: two functions, one declared family.
+config = MeasurementConfig(mode="real", repetitions=3, confirmatory_comparisons=(
+    ConfirmatoryComparison(name="accuracy-not-worse", reference_id=before.id, candidate_id=after.id,
+                           metric="correct", margin=0.02),
+    ConfirmatoryComparison(name="leak-loss", reference_id=before.id, candidate_id=after.id,
+                           metric="loss:external_send", margin=500, maximum_severity=5000),
+))
+
+# Pre/post on the same book: bind one plan to both configurations.
+plan = ComparisonPlan(declared_at=datetime.now(UTC), comparisons=(
+    ConfirmatoryComparison(name="wrong-account", reference_id=before.id, candidate_id=after.id,
+                           metric="loss:wrong_account", margin=1000, maximum_severity=5000),))
+pre = measure((before_impl,), distribution, book, domain=domain, config=MeasurementConfig(prepost_plan=plan, mode="simulation"))
+post = measure((after_impl,), distribution, book, domain=domain, config=MeasurementConfig(prepost_plan=plan, mode="simulation"))
+report = compare_measurements(pre, post)
+print(report["paired_differences"][0]["comparisons"][0]["conclusion"])   # non_inferior | not_established
+```
+
+## Metrics you can compare
+
+`correct`, `field_f1`, `schema_valid`, `cost`, `latency_ms`, `tokens`, `steps`, `retries`, `loss:<harm>` (currency per 10,000 trajectories), `metric:<name>` (needs `direction` and `unit`, optionally `value_bounds`). Positive advantage always favours the candidate.
+
+## Non-inferiority
+
+Concluded only when the lower interval bound is strictly above `-margin`. For monetary losses the interval is unidentified unless `maximum_severity` bounds the per-trial loss; without it the conclusion is `not_established`, never non-inferior. Failing to establish non-inferiority is not a finding of inferiority.
+
+## Multiplicity
+
+All confirmatory comparisons in a measurement (or a bound pre/post plan) form one family with Bonferroni-adjusted intervals. Declare either `confirmatory_comparisons` or a `prepost_plan`, not both. Everything else is marked exploratory.
+
+## Pre/post
+
+`compare_measurements(pre, post)` requires identical trajectories, distribution, environment, graders, repetitions and plan, and the plan must predate both. It says whether it compared two functions or two measurements of one function identity.
+
+## Power
+
+`sample_size()` and `detectable_difference()` use a paired normal approximation with the cluster design effect `1 + (cluster_size − 1)·ICC`. Bring a paired standard deviation and an ICC from a pilot; the functions do not infer power after the fact.
+
+## Certificates, traces and the dashboard
+
+_Guides · The outputs of a measurement and where to look at them._
+
+A measurement yields three artefacts: certificates (one per function), an offline trace explorer, and a content-addressed snapshot that a local store and API can serve.
+
+## Example
+
+```python
+from signal_sdk.certificate import certificates, export_certificates, markdown
+from signal_sdk.visualization import export_html, render_terminal
+from signal_sdk.dashboard.store import DashboardStore
+
+for report in certificates(measurement):
+    print(report.function_id[:12], report.status, report.columns["outcome"]["correct"]["estimate"])
+
+export_certificates(measurement, "outputs/certificates")     # <function-id>.json and .md
+export_html(measurement, "outputs/traces.html")               # offline, all data escaped
+render_terminal(measurement)                                  # rich tables in the terminal
+
+store = DashboardStore("outputs/store")
+store.put(measurement)                                        # write-once by content id
+```
+
+```sh
+signal-sdk report outputs/measurement.json --output outputs/report
+signal-sdk dashboard --data outputs/store --port 8080        # http://127.0.0.1:8080/docs
+```
+
+## Certificate sections, in order
+
+1. Function identity with a hash per component
+2. Task distribution with generator parameters, hazard rates, label rule, attack-suite version
+3. Environment and graders
+4. Validity and re-measurement triggers
+5. Harm classes: attempts, occurrences, rates with intervals
+6. Custom metrics
+7. Loss per 10,000 trajectories with its assumptions
+8. Book difficulty and rate conditional on label
+9. Consistency and process
+10. Calibration curve and chosen threshold
+11. Robustness
+12. Injection by vector, with the sentence that it was measured against a specific suite
+13. What this measurement does not say
+14. Hours and cost spent
+15. Predeclared comparisons
+
+`RiskCertificate.status` is `simulation`, `measured`, `control`, `execution_errors_present` or `invalid_provider_version`.
+
+## Trace explorer
+
+`traces.html` shows every trial grouped by trajectory × function: goals and sub-goals, tool arguments and results, tokens, cost, latency, the events table and the outcome. Filter by function or trajectory. All untrusted content is HTML-escaped.
+
+## Store and API
+
+The store keeps `<id>.measurement.json` files, permits identical rewrites, rejects conflicting content, and re-verifies the hash on read. `create_app()` serves `GET /health`, `POST|GET /api/measurements`, `GET /api/measurements/{id}`, `GET /api/measurements/{id}/trials[/{index}]`, `POST|GET /api/measurements/{id}/certificate`, `GET /measurements/{id}` (HTML) and `GET /docs`. It has no authentication; keep it local.
+
+## Statistics
+
+_Guides · Estimands, intervals, pairing, difficulty, loss, calibration and drift._
+
+This document defines the estimands and assumptions of the implementation. It
+distinguishes frequentist confidence intervals, approximate posterior intervals,
+and predictive distributions. None is a composite measure of function quality.
+
+## Crossed Design and Estimands
+
+For trajectory `e`, function `f`, repetition `r`, let `Y[e,f,r]` be a measured outcome
+or harm indicator. Signal first averages repetitions within an trajectory, then
+averages those trajectory values with equal weight. Repetitions assess stability;
+they do not increase the number of independent trajectories.
+
+All functions must have the same `(trajectory_id, repetition, seed)` keys. Trajectory
+labels and top clusters must remain fixed. Duplicate trials, missing pairs, and
+inconsistent repetition sets are rejected. Cosmetic variants are excluded from
+the main book estimand and analyzed with their originals separately.
+
+Attempt rate is the mean probability that a trial of an trajectory attempts a given
+harm. Occurrence rate uses actual environment effects. The report additionally
+counts affected trials and trajectories with at least one affected repetition. Those
+counts and the trajectory-averaged rate answer different questions.
+
+## Paired Cluster Intervals
+
+`interval()` resamples entire top-level clusters with replacement, retaining every
+trajectory and repetition belonging to each selected cluster. Each bootstrap mean
+remains trajectory-weighted, so unequal cluster sizes retain their observed book
+weights. A cluster-robust Student-t envelope is combined with the bootstrap
+percentile interval to guard against narrow intervals from a small number of
+clusters. Reported bounded rates are restricted to `[0, 1]`.
+
+This is a custom top-cluster resampling statistic implemented with NumPy; it is
+not a call to an independent-observation bootstrap. The related pairing principle
+is documented by [SciPy's bootstrap API](https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.bootstrap.html).
+The extra cluster-t and bounded-sample guards are Signal's implementation choices,
+not guarantees supplied by SciPy.
+
+Cluster exchangeability and independence are substantive assumptions. For the
+built-in generator, vendors are the top cluster and template instances are nested
+within vendors. If a global template creates shared dependence across vendors,
+these clusters are insufficient. Redefine the top cluster around the shared
+source or validate a different design; merely labeling dependent vendors as
+independent does not fix it.
+
+With fewer than two independent clusters, a bounded rate gets the full possible
+range and an unbounded mean gets an unavailable interval. A result is not made
+precise by counting repeated trials as independent observations.
+
+### Zero Events
+
+For zero observed independent Bernoulli trajectories, the one-sided 95% bound is
+`1 - 0.05**(1/n)`, approximately `3/n`. The upper endpoint of a central two-sided
+95% interval instead uses `0.025`, approximately `3.69/n`.
+
+With clusters, Signal reports a conservative bound using the independent cluster
+count, scaled by maximum cluster size divided by mean cluster size and capped at
+one. It explicitly states this stronger exchangeable-cluster assumption and
+prints why `3/(trajectories * repetitions)` is inappropriate. Constant bounded
+interior estimates use a weighted Hoeffding guard. These guards are conservative
+finite-sample choices, not universal optimal intervals.
+
+### Pairing and Non-inferiority
+
+For each trajectory, Signal differences the two functions' paired repetition means.
+For correctness, positive advantage is candidate minus reference. For harms,
+positive advantage is reference loss minus candidate loss, multiplied by 10,000.
+The cluster bootstrap resamples these paired differences together.
+
+Every confirmatory comparison needs a pre-set margin. Monetary harm comparisons
+use `loss:<harm>` with a margin in currency per 10,000 trajectories. A constant loss
+difference has no empirically identified unseen tail: without a declared maximum
+severity the interval is unavailable and non-inferiority is not established.
+`maximum_severity` bounds the entire harm-class loss of a trial, not a single
+payment; observed trial losses exceeding it reject the comparison.
+
+Non-inferiority is concluded only when `lower_advantage_bound > -margin`.
+Equality does not pass. A failure to establish non-inferiority is not automatically
+a finding of inferiority.
+
+Bonferroni uses `alpha = 0.05 / number_of_confirmatory_comparisons`. The resulting
+simultaneous intervals are at least 95% individually, and control family-wise
+error at 5% when their marginal coverage assumptions hold. Declare one
+within-measurement family or one bound pre/post family; configuration rejects
+mixing separate declarations. Other comparisons and all
+calibration-curve points are exploratory. No p-values are emitted.
+
+## Consistency and Process
+
+`pass_power_k` is the fraction of trajectories for which **every** repetition is
+correct. It is pass^k, not the fraction with at least one success. With exactly
+`k` observed repetitions this is a direct empirical all-pass fraction; the SDK
+does not infer independence among repetitions by exponentiating a pass rate.
+
+Path consistency is the fraction of trajectories whose repetitions have identical
+ordered tool-name sequences. The SHA-256 signature deliberately excludes
+arguments and timing; inspect transcripts to compare arguments. Both consistency
+fractions get cluster intervals. Cost includes recorded mean/interval, median,
+95th and 99th percentiles, maximum, and mean above the 95th percentile. Missing
+monetary usage is counted and is not replaced with zero.
+
+## Power Before Execution
+
+`sample_size()` and `detectable_difference()` use a paired normal approximation
+with a cluster design effect `1 + (mean_cluster_size - 1) * ICC`. Inputs are the
+paired trajectory-level monetary standard deviation, target margin/difference,
+power, cluster size, ICC, and confirmatory family size. The non-inferiority
+planning scenario assumes true advantage zero.
+
+Use pilot evidence or defensible prior assumptions for the paired standard
+deviation and ICC. These calculations assume approximately equal cluster sizes
+and enough clusters for the normal approximation. Rare-event/severity-tail books
+may require dedicated simulation planning. The functions do not claim that more
+repetitions can replace independent clusters.
+
+## Difficulty Model
+
+The binary correctness model is:
+
+```text
+logit P(correct[e,f,r]) = function * label fixed effects
+                         + top-cluster random intercept
+                         + trajectory random intercept
+                         + trajectory:function random intercept
+```
+
+There is no discrimination parameter. Conditional random effects are independent
+Gaussians. Fixed effects have Normal(0, 2^2) priors; log random-effect standard
+deviations have Normal(0, 0.5^2) priors.
+
+Estimation uses [statsmodels' binomial mixed model](https://www.statsmodels.org/stable/generated/statsmodels.genmod.bayes_mixed_glm.BinomialBayesMixedGLM.html)
+with variational posterior means and variance-component uncertainty. Signal
+computes joint conditional coefficient covariance from the logistic posterior
+Hessian so that fixed and random coefficient correlations are retained. This
+avoids treating their finite-book effects as independent when they cancel.
+Hyperparameter/coefficient correlations remain approximate. These are explicitly
+approximate Bayesian credible intervals, not frequentist 95% coverage guarantees.
+
+For empirical difficulty under assessment of function `f`, all of `f`'s rows are
+removed and the model is fitted again. Per-trajectory predicted failure probabilities
+and intervals come from the remaining functions. They are relative to those
+functions; trivial controls alone are a weak panel for evaluating a sophisticated
+function. A useful empirical difficulty distribution needs several informative
+functions and adequate repetition.
+
+The label-explained fraction divides variance of label-specific mean fixed
+log-odds by that variance, random-effect variances, and logistic residual variance
+`pi^2/3`. It is a stated latent-scale descriptive partition, not a universal R^2.
+The report includes its interval, fixed function-by-label effects, and conditional
+correctness by label.
+
+### Future Book
+
+Prediction samples parameter uncertainty, new independent clusters, new trajectory
+and trajectory/function effects, and binary results for 10,000 future trajectories.
+It assumes the observed label mixture and mean cluster size. The comparison
+interval for the measured book conditions on its fitted trajectory effects; it is
+distinct from the top-cluster population-rate confidence interval.
+
+The report explicitly checks that the new-book predictive interval is wider than
+the conditional measured-book interval. It reports a failure rather than
+artificially expanding an endpoint. The mandatory planted simulation must pass
+this check. Width is not a universal mathematical ordering for arbitrary
+datasets and models; a failed check in a real book prevents treating that model
+prediction as validated.
+
+At least 12 trajectories, two functions, and four clusters are required to attempt a
+fit. These are computation guards, not evidence that such a small fit is reliable.
+Nonconvergence or insufficient design produces `not_estimable` or
+`insufficient_data`. Dense joint covariance requires quadratic memory in the
+number of random effects; this initial implementation targets modest constructed
+books, not millions of trajectories.
+
+## Calibration and Review Curves
+
+Risk signals must be finite probabilities recorded before the first action. The
+last such signal is used. Signals and event frequencies are averaged within
+trajectories. Top-level clusters are split reproducibly into training and held-out
+halves. Missing signals are excluded and counted; at least four usable clusters
+are needed. Calibration bins compare mean signal with attempted-event frequency.
+
+The threshold minimizes observed training review fraction subject to a configured
+training residual-loss target. A threshold above one means review none. Threshold
+fitting never reads the held-out outcomes. Reported operating points and the
+review curve use held-out clusters and pointwise intervals.
+
+The curve assumes review prevents all measured occurrence loss. To avoid counting
+one payment repeatedly under overlapping harm classes, its trial loss is the
+maximum occurred harm-class severity. This may understate multiple independent
+simultaneous losses and is printed as an assumption. A fitted training constraint
+does not guarantee future residual loss. There is no operational routing product.
+
+## Robustness
+
+Cosmetic variants require identical ground truth, labels, clusters, repetition
+indices, and seeds. Comparison uses canonical actual payment/email/hold/escalation
+signatures, not correctness alone: two different wrong outcomes count as a
+change. Variants/repetitions are averaged within the original trajectory before
+cluster bootstrapping. Tool-fault mishandling is reported conditional on trajectories
+where a fault was injected. An unexercised injected fault is not automatically
+called mishandled.
+
+## Frequency and Severity
+
+Loss is simulated separately per harm class, from occurrence frequency and a
+specified fixed, gamma, or lognormal severity distribution. Currency and mean
+severity must be supplied. Gamma and lognormal distributions also use an assumed
+coefficient of variation. These are assumptions, not fitted severity guarantees.
+
+Frequency uses an explicitly assumed beta distribution with Jeffreys prior
+`Beta(0.5, 0.5)` and effective cluster information
+`(sum cluster_sizes)^2 / sum(cluster_sizes^2)`. The observed trajectory occurrence
+rate forms fractional pseudo-counts. This is a conservative information model,
+not an exact posterior for arbitrary clustered data. Given a sampled frequency,
+future counts are binomial and severities are independent. Extra future cluster
+bursts beyond that parameter uncertainty are not modeled.
+
+Reports give mean, median, 95th/99th percentiles, tail mean above the 99th percentile,
+expected-loss credible interval, and loss predictive interval. Zero observations
+retain positive frequency uncertainty. No assumed severity means no monetary
+prediction for that class. Harm classes are not summed, because one action can
+satisfy several graders.
+
+## Audit-Only Sequential Drift
+
+Drift consumes randomly audited, human-reviewed safe trajectories with a common
+positive inclusion probability. Each completed top-level cluster is consumed
+once, in order, and cluster means are weighted equally. Baselines must have the
+same estimand and be fixed before monitoring. Cost requires a predeclared true
+upper bound; clipping a cost to manufacture this bound is invalid.
+
+For bounded cluster observation `x` and baseline `mu`, the one-sided Hoeffding
+e-process adds `lambda*(x - mu) - lambda^2/8` to log evidence, using normalized
+`[0,1]` observations and `lambda = 4*expected_shift`. Under the null, each next
+cluster's conditional mean must be at most its baseline. The alarm threshold is
+`number_of_metrics / alpha`, giving a Bonferroni anytime threshold under that
+conditional-mean assumption. It detects increases, not arbitrary distribution
+changes or decreases. Human selection outside the random audit process invalidates
+the claim.
+
+## Self-Validation
+
+The default seeded gate uses 150 clustered rate simulations, 100 deliberately
+worse-function comparisons, a planted mixed-model book, known-loss simulations,
+calibration split checks, zero-event checks, and actual tool-executed controls.
+The observed default coverage is reported with a Monte Carlo interval; acceptance
+requires at least 90% coverage for the nominal 95% interval in that planted regime.
+Deliberately worse functions must pass non-inferiority in no more than 5% of the
+100 simulations, and leave-function-out difficulty correlations must exceed 0.5.
+
+Those tolerances and sample sizes are visible in `validation.py` and in the
+resulting evidence. The checks validate selected numerical and behavioral
+properties; they do not establish uniform coverage, certify provider behavior,
+or replace independent statistical review for a new book.
+
+## Limitations
+
+_Guides · What a measurement does not say, generated from its configuration._
+
+Every certificate carries a limitations section derived from the actual configuration. These are the standing ones.
+
+- A measurement applies to one function, in one environment, on one distribution, under one grader definition, in one period. Any change is a new measurement.
+- A model update at the provider invalidates the certificate even when the public model name stays the same. This is the reason measurement is a service, not a project.
+- Severity is assumed. The loss distribution is a consequence of the printed assumption, never an observation.
+- The attack suite is a lower bound. Injection is measured against a specific suite, not against all attacks. A book without hazards says nothing about adversarial inputs.
+- The unit is the trajectory. Repetitions are dependent; top-level clusters are assumed exchangeable and independent. Shared effects across declared clusters invalidate the intervals.
+- Zero observed events is not zero risk; the upper bound (roughly 3/n with n independent units) is reported in plain language.
+- Difficulty uses an approximate Bayesian mixed model; its intervals are credible intervals, not frequentist coverage guarantees. Predictions for the next 10,000 trajectories assume the observed label mixture and cluster size.
+- Calibration measures association between a runtime signal and attempted events; the review curve assumes review prevents loss. It is not a router.
+- Drift is measured only on randomly selected, human-reviewed operational trials that were judged safe.
+- Judge ratings are experimental evidence. Their reliability is measured; they do not define insured harms.
+- Function adapters are trusted instrumentation. Content hashes are integrity checks, not signatures or timestamps.
+- Self-validation passes finite seeded checks in selected regimes; it is not universal statistical validation.
+
+## Example
+
+```python
+from signal_sdk.certificate import limitations
+
+for line in limitations(measurement, function.id):
+    print("-", line)
+```
+
+```text
+- This snapshot applies only to function 7681ac0f… on distribution 3f1c… in environment 9ab2… under graders 51d0…; no validity period was declared.
+- A model update at the provider invalidates this certificate, even if the public model name stays the same. Re-measure with a pinned provider version.
+- Changing the function (models, prompts, implementation, configuration) makes a new function. Changing the environment, its tools or mandate, the task distribution, the graders, or the period requires a new measurement.
+- Severity is assumed. Configured severity distributions: {}.
+- No attack suite was injected; this measurement says nothing about adversarial inputs.
+- ...
+- This is a simulation measurement. It makes no claim about a real provider-backed function.
+- No severity assumptions were supplied, so a monetary loss distribution is not estimable.
+```
+
+## measure()
+
+_SDK reference · Run the full crossing of functions × trajectories × repetitions and return an immutable Measurement._
+
+```python
+from signal_sdk import measure
+
+measure(
+    functions: tuple[FunctionImplementation, ...],
+    distribution: TaskDistribution,
+    trajectories: tuple[Trajectory, ...],
+    *,
+    domain: Domain = RETURN_VALUES,
+    config: MeasurementConfig | None = None,
+    validity: ValidityPeriod | None = None,
+    on_trial: Callable[[Trial], None] | None = None,
+) -> Measurement
+```
+
+Runs the self-validation gate, verifies the book against its distribution, adds the domain's two controls, then executes every function on every trajectory for `config.repetitions` repetitions with seeds shared across functions.
+
+## Example
+
+```python
+from signal_sdk import FunctionImplementation, Function, MeasurementConfig, measure
+from signal_sdk.domains.payments import generate_book, payments_domain, Mandate
+
+distribution, book = generate_book(48, seed=7, vendors=16, variants=True)
+domain = payments_domain(Mandate(amount_cap="1500", allowed_vendors=(...), allowed_accounts=(...),
+                                 escalation_conditions=("duplicate", "bank_detail_change")))
+
+measurement = measure(
+    (FunctionImplementation(Function(name="reconcile", implementation={"revision": "9f3c1e2"}), reconcile, "simulation"),),
+    distribution, book, domain=domain,
+    config=MeasurementConfig(mode="simulation", repetitions=3, seed=7,
+                             severity_assumptions={"wrong_account": {"distribution": "fixed", "amount": 100, "currency": "USD"}}),
+    on_trial=lambda trial: print(trial.trajectory_id, trial.grades.outcome.correct),
+)
+```
+
+## Parameters
+
+| Name | Type | | |
+|---|---|---|---|
+| `functions` | `tuple[FunctionImplementation, ...]` | required | Distinct function identities to measure. Do not include controls. |
+| `distribution` | `TaskDistribution` | required | The book's binding: dataset hash or generator parameters. |
+| `trajectories` | `tuple[Trajectory, ...]` | required | The book. Must reproduce or hash to the distribution. |
+| `domain` | `Domain` | `RETURN_VALUES` | Environment, graders and controls. |
+| `config` | `MeasurementConfig` | `MeasurementConfig(mode="real")` | Repetitions, seed, bootstrap and loss settings, comparisons. |
+| `validity` | `ValidityPeriod` | `None` | Period the measurement is valid for; the timestamp must fall inside it. |
+| `on_trial` | `Callable[[Trial], None]` | `None` | Called with each completed trial, for progress or streaming storage. |
+
+## Returns
+
+An immutable `Measurement`. Its `id` is the SHA-256 of its content; `control_ids` lists the controls; `validation` holds the gate's evidence.
+
+## Raises
+
+- `RuntimeError` when self-validation fails: no function is executed.
+- `ValueError` when the book does not match its distribution, function kinds do not match `config.mode`, identities are not distinct, a predeclared comparison names an unknown function, controls are supplied, or the timestamp is outside `validity`.
+
+## Notes
+
+`mode="real"` requires every implementation to be `kind="real"` and to record model usage with a `provider_version` matching a declared model; `mode="simulation"` refuses real implementations. An exception inside the function keeps everything recorded so far and marks the trial with `error`.
+
+## run_experiment()
+
+_SDK reference · Measure several functions on one book and read a set of rulers off the result._
+
+```python
+from signal_sdk import run_experiment, evaluate
+
+run_experiment(
+    name: str,
+    functions: Sequence[FunctionImplementation],
+    distribution: TaskDistribution,
+    trajectories: Sequence[Trajectory],
+    *,
+    domain: Domain = RETURN_VALUES,
+    rulers: Sequence[Ruler] = DEFAULT_RULERS,
+    repetitions: int = 3,
+    seed: int = 0,
+    mode: str = "simulation",
+    config: MeasurementConfig | None = None,
+    validity: ValidityPeriod | None = None,
+    baseline: str | None = None,
+    on_trial: Callable[[Trial], None] | None = None,
+) -> Experiment
+
+evaluate(name: str, measurement: Measurement, rulers: Sequence[Ruler] = DEFAULT_RULERS, *,
+         baseline: str | None = None) -> Experiment
+```
+
+`run_experiment()` calls `measure()` then `evaluate()`. `evaluate()` applies rulers to an existing measurement, which is how you re-read a snapshot after `rate_trials()` added ratings.
+
+## Example
+
+```python
+from signal_sdk import DEFAULT_RULERS, rate, run_experiment
+
+experiment = run_experiment(
+    "prompt variants", (baseline_impl, terse_impl, verbose_impl), distribution, book,
+    rulers=DEFAULT_RULERS + (rate("tokens"), rate("attempts:external_send")),
+    repetitions=3, seed=11, baseline="baseline",
+)
+print(experiment.table())
+print(experiment.comparisons["terse"]["comparisons"][0])
+```
+
+```json
+{"name": "accuracy", "metric": "correct", "confirmatory": false, "conclusion": "exploratory",
+ "advantage": {"estimate": -0.042, "interval": [-0.125, 0.041], "confidence": 0.95, "clusters": 16}}
+```
+
+## Parameters
+
+| Name | Type | | |
+|---|---|---|---|
+| `name` | `str` | required | Label for the report. |
+| `functions` | `Sequence[FunctionImplementation]` | required | Variants to compare. The first is the default baseline. |
+| `rulers` | `Sequence[Ruler]` | `DEFAULT_RULERS` | What to read off the rows. |
+| `repetitions`, `seed`, `mode` | | `3`, `0`, `"simulation"` | Used to build a `MeasurementConfig` when `config` is not given. |
+| `baseline` | `str` | first function's name | Reference for paired comparisons. |
+| others | | | As in `measure()`. |
+
+## Returns
+
+An `Experiment` with:
+
+| Attribute | Meaning |
+|---|---|
+| `measurement` | The underlying immutable `Measurement`. |
+| `results` | `{function_name: {ruler_name: {"estimate", "interval", ...}}}` for every function including controls. |
+| `comparisons` | `{candidate_name: compare(...) report}` against the baseline, one exploratory entry per ruler that has a `metric`. Controls are skipped. |
+| `functions` | `{name: id}`. |
+| `table()` | Markdown table, functions × rulers. |
+| `markdown()` | Full report with paired differences. |
+| `to_dict()` | JSON-ready summary. |
+
+## Notes
+
+Rulers whose metric is missing on some trial (unreported `cost`, an absent `metric:<name>`) are still reported per function but not paired. Comparisons here are exploratory; declare confirmatory ones in `MeasurementConfig`.
+
+## rate_trials()
+
+_SDK reference · Attach a rater's verdict to every trial and get a new snapshot._
+
+```python
+from signal_sdk import rate_trials
+
+rate_trials(measurement: Measurement, rater: str,
+            judge: Callable[[Trajectory, Trial], Any]) -> Measurement
+```
+
+This is how a human panel or a language-model judge enters an experiment: after the fact, over recorded transcripts, as a rating held alongside the deterministic grades. Rulers such as `inter_rater_reliability()` and `agreement_with_grader()` then measure whether the rater agrees with anyone.
+
+## Example
+
+```python
+from signal_sdk import rate_trials, evaluate, inter_rater_reliability, agreement_with_grader
+
+def llm_judge(trajectory, trial):
+    verdict = client.responses.create(model=JUDGE, input=[
+        {"role": "system", "content": "Answer PASS or FAIL."},
+        {"role": "user", "content": f"Task: {trajectory.input}\nTranscript: {trial.transcript.model_dump_json()}\n"
+                                    f"Outcome: {trial.outcome.model_dump_json()}"},
+    ]).output_text.strip()
+    return verdict == "PASS"
+
+judged = rate_trials(measurement, "grader", lambda t, trial: trial.grades.outcome.correct)
+judged = rate_trials(judged, "gpt-judge", llm_judge)
+judged = rate_trials(judged, "human", lambda t, trial: human_labels[(t.id, trial.function_id, trial.repetition)])
+
+report = evaluate("judge reliability", judged, rulers=(
+    inter_rater_reliability(["grader", "gpt-judge", "human"]),
+    inter_rater_reliability(["human", "gpt-judge"]),
+    agreement_with_grader("gpt-judge"),
+))
+print(report.table())
+```
+
+## Parameters
+
+| Name | Type | | |
+|---|---|---|---|
+| `measurement` | `Measurement` | required | The snapshot to annotate. |
+| `rater` | `str` | required | Rater name; becomes the key in `Grades.ratings`. |
+| `judge` | `Callable[[Trajectory, Trial], Any]` | required | Returns a categorical verdict. Booleans are read as correct/incorrect by `agreement_with_grader()`. |
+
+## Returns
+
+A new `Measurement` with `ratings[rater]` set on every trial. Its `id` changes because content changed; `validation`, functions and trajectories are untouched.
+
+## Notes
+
+Ratings are experimental evidence, not graders. They never enter `Event`s or the certificate's harm columns. The judge may be non-deterministic; that is exactly what reliability rulers measure.
+
+## dataset_distribution()
+
+_SDK reference · Bind a hand-built book by the hash of its complete content._
+
+```python
+from signal_sdk import dataset_distribution
+
+dataset_distribution(
+    name: str,
+    trajectories: tuple[Trajectory, ...],
+    *,
+    label_rule: str,
+    hazard_rates: dict[str, float] | None = None,
+    attack_suite_version: str | None = None,
+    top_cluster: str = "trajectory",
+) -> TaskDistribution
+```
+
+## Example
+
+```python
+distribution = dataset_distribution(
+    "Support tickets v2", book,
+    label_rule="refund if the ticket asks for money back; escalate if it mentions legal action; otherwise routine",
+    hazard_rates={"prompt_injection": 0.04}, attack_suite_version="tickets-inj-1",
+    top_cluster="customer",
+)
+print(distribution.id, distribution.dataset_hash[:12])
+```
+
+## Parameters
+
+| Name | Type | | |
+|---|---|---|---|
+| `name` | `str` | required | Human name of the book. |
+| `trajectories` | `tuple[Trajectory, ...]` | required | The complete book; its content hash becomes `dataset_hash`. |
+| `label_rule` | `str` | required | The written rule that produced the labels. |
+| `hazard_rates` | `dict[str, float]` | `{}` | Construction probabilities of injected hazards. |
+| `attack_suite_version` | `str` | `None` | Names the injection suite; `None` means no adversarial content. |
+| `top_cluster` | `str` | `"trajectory"` | What `Trajectory.cluster` denotes. |
+
+## Returns
+
+A `TaskDistribution` with `dataset_hash` set. `measure()` recomputes the hash and refuses a book that was edited afterwards.
+
+## Notes
+
+For generated books use the domain's generator (for example `signal_sdk.domains.payments.generate_book`), which binds parameters and seed and lets the runner regenerate the book to verify it.
+
+## Function
+
+_SDK reference · The identity of the system under test._
+
+```python
+from signal_sdk import Function, ModelIdentity
+
+Function(
+    implementation: dict[str, Any],
+    model: ModelIdentity | None = None,
+    models: tuple[ModelIdentity, ...] = (),
+    prompts: tuple[str, ...] = (),
+    configuration: dict[str, Any] = {},
+    name: str = "function",
+)
+
+ModelIdentity(provider: str, name: str, version: str)
+```
+
+A function is what you are measuring and nothing else. Tools, mandate, documents and the period are external and belong to the measurement.
+
+## Example
+
+```python
+function = Function(
+    name="invoice-agent",
+    model=ModelIdentity(provider="anthropic", name="claude-sonnet-5", version="claude-sonnet-5-20260812"),
+    prompts=("Reconcile the invoice; escalate when authorization is missing.",),
+    implementation={"repository": "org/agent", "revision": "9f3c1e2"},
+    configuration={"temperature": 0, "max_steps": 12},
+)
+print(function.id)                 # sha256 over the four component hashes
+print(function.component_hashes)   # {"models": ..., "prompts": ..., "implementation": ..., "configuration": ...}
+
+variant = function.model_copy(update={"prompts": ("Reconcile the invoice.",)})
+assert variant.id != function.id
+```
+
+## Fields
+
+| Name | Type | | |
+|---|---|---|---|
+| `implementation` | `dict[str, Any]` | required, non-empty | Revision, content hash or coordinates of the code that runs. |
+| `model` | `ModelIdentity` | `None` | The single model. Mutually exclusive with `models`. |
+| `models` | `tuple[ModelIdentity, ...]` | `()` | Several models in one system. |
+| `prompts` | `tuple[str, ...]` | `()` | Exact prompts. |
+| `configuration` | `dict[str, Any]` | `{}` | Anything else that changes behaviour: temperature, step limits, feature flags. |
+| `name` | `str` | `"function"` | Display name. Not part of the identity. |
+
+## Computed
+
+| Name | Meaning |
+|---|---|
+| `id` | SHA-256 of `component_hashes`. |
+| `component_hashes` | One hash per component: `models`, `prompts`, `implementation`, `configuration`. |
+| `model_identities` | `(model,)` or `models`. |
+
+## Raises
+
+`ValueError` when `implementation` is empty, when both `model` and `models` are given, or when a `ModelIdentity.version` is a moving alias (`latest`, `default`, `auto`, `current`).
+
+## Notes
+
+Per-model prompts and configuration for systems of interacting models are not yet modelled; today `prompts` and `configuration` are flat.
+
+## FunctionImplementation
+
+_SDK reference · A Function identity paired with the callable that runs it._
+
+```python
+from signal_sdk import FunctionImplementation, TrialContext
+
+FunctionImplementation(
+    definition: Function,
+    execute: Callable[[TrialContext], Any],
+    kind: Literal["real", "simulation", "control"] = "real",
+)
+
+TrialContext(input: Any, tools: Any, trace: TraceRecorder, seed: int, repetition: int)
+```
+
+## Example
+
+```python
+def run(context: TrialContext) -> str:
+    with context.trace.goal("Answer"):
+        started = time.perf_counter()
+        response = client.responses.create(model=MODEL, input=context.input["task"], seed=context.seed)
+        context.trace.record_usage(
+            tokens=response.usage.total_tokens, cost=None,
+            duration_ms=(time.perf_counter() - started) * 1000,
+            metadata={"provider_version": response.model},
+        )
+        if response.output_text.strip() == "ESCALATE":
+            context.tools.escalate(reason="Model asked for a human")
+            return None
+        return response.output_text
+
+implementation = FunctionImplementation(function, run, kind="real")
+```
+
+## Parameters
+
+| Name | Type | | |
+|---|---|---|---|
+| `definition` | `Function` | required | The identity. |
+| `execute` | `Callable[[TrialContext], Any]` | required | Synchronous. Its return value is the outcome in the default domain and evidence elsewhere. |
+| `kind` | `"real" \| "simulation" \| "control"` | `"real"` | Must match `MeasurementConfig.mode`. Controls are created by the runner. |
+
+## TrialContext
+
+| Field | Meaning |
+|---|---|
+| `input` | A mutable copy of `Trajectory.input`. |
+| `tools` | The domain's environment instance: whatever tools it exposes, plus `escalate()` in the built-ins. |
+| `trace` | The `TraceRecorder`: `goal()`, `record_usage()`, `record_signal()`, `append_message()`. |
+| `seed` | Deterministic per (trajectory, repetition), identical across functions. Pass it to your provider. |
+| `repetition` | The repetition index. |
+
+## Notes
+
+The function never sees labels or ground truth. Returning an awaitable is an error: wrap async code in a synchronous adapter. `kind="real"` trials must record at least one `model` step with a `provider_version` in the function's declared versions; otherwise the trial is marked with an error and its usage is recorded as unreported.
+
+## Domain
+
+_SDK reference · Environment, graders and controls bundled for a kind of task._
+
+```python
+from signal_sdk import Domain, RETURN_VALUES, ReturnValueEnvironment, process_grade, field_f1
+
+Domain(
+    environment: EnvironmentDefinition,
+    graders: GraderDefinition,
+    make_environment: Callable[[Trajectory, int, TraceRecorder], Environment],
+    grade: Callable[[Trajectory, Transcript, Outcome], Grades],
+    controls: tuple[tuple[str, Callable[[TrialContext], Any]], ...],
+    reproduce: Callable[[TaskDistribution], tuple[Trajectory, ...]] | None = None,
+)
+```
+
+## Example
+
+```python
+from signal_sdk import Domain, EnvironmentDefinition, GraderDefinition, ReturnValueEnvironment, Grades, OutcomeGrade, process_grade
+
+def grade_json(trajectory, transcript, outcome):
+    expected, got = trajectory.ground_truth["value"], outcome.value
+    return Grades(outcome=OutcomeGrade(correct=got == expected, field_f1=field_f1(expected, got)),
+                  events=(), process=process_grade(transcript),
+                  metrics={"keys": float(len(got)) if isinstance(got, dict) else 0.0})
+
+JSON_EXTRACTION = Domain(
+    environment=RETURN_VALUES.environment.model_copy(update={"name": "json-extraction"}),
+    graders=GraderDefinition(name="json-exact", version="1", components={"outcome": "dict equality"}),
+    make_environment=ReturnValueEnvironment,
+    grade=grade_json,
+    controls=(("empty", lambda ctx: {}), ("always_escalate", lambda ctx: ctx.tools.escalate())),
+)
+```
+
+## Fields
+
+| Name | Type | | |
+|---|---|---|---|
+| `environment` | `EnvironmentDefinition` | required | Identity of the external world; bound to the measurement. |
+| `graders` | `GraderDefinition` | required | Identity of the measurement definition. |
+| `make_environment` | `(trajectory, seed, trace) -> Environment` | required | Builds a fresh environment per trial. It must expose `trace` and `finish(returned) -> Outcome`. |
+| `grade` | `(trajectory, transcript, outcome) -> Grades` | required | Pure and deterministic. |
+| `controls` | at least two `(name, execute)` | required | Trivial functions the graders must separate. |
+| `reproduce` | `(distribution) -> trajectories` | `None` | Regenerates a generator-bound book so the runner can verify it. |
+
+## RETURN_VALUES
+
+The default domain. `ReturnValueEnvironment(trajectory, seed, trace)` exposes `input`, `escalate(reason="")`, `goal`, `record_usage`, `record_signal`, `append_message`, and `finish(returned)` returning `Outcome(value=returned, escalated=...)`. `grade_return_value` marks a trial correct when `value == ground_truth["value"]`, or when the trajectory requires escalation and the function escalated. Its one harm is `unnecessary_escalation`. Controls: `never_escalate`, `always_escalate`.
+
+## Helpers
+
+| Function | Returns |
+|---|---|
+| `process_grade(transcript)` | `ProcessGrade` from the recorded steps: schema validity, steps, retries, tokens, cost, latency, path signature. |
+| `field_f1(expected, actual)` | Token-level F1 over the leaves of two JSON values; `1.0` when both are empty. |
+
+## Raises
+
+`ValueError` when fewer than two controls are given.
+
+## TraceRecorder
+
+_SDK reference · Records every step of a trial; environments write to it, graders read from it._
+
+```python
+from signal_sdk import TraceRecorder
+
+trace = TraceRecorder()
+trace.goal(name: str)                                   # context manager
+trace.append_message(role: str, content: str) -> None
+trace.record_usage(*, tokens: int | None, cost: float | None, duration_ms: float = 0.0,
+                   name: str = "model", metadata: dict | None = None) -> None
+trace.record_signal(probability: float, name: str = "risk_signal") -> None
+trace.record_tool(name: str, arguments: dict, call: Callable[[], Any], *, state_changing: bool = False) -> Any
+trace.transcript() -> Transcript
+```
+
+## Example
+
+```python
+class Env:
+    def __init__(self, trajectory, seed, trace):
+        self.trace, self.input = trace, dict(trajectory.input)
+        self._escalated = False
+
+    def lookup(self, key):
+        return self.trace.record_tool("lookup", {"key": key}, lambda: {"ok": True, "value": TABLE.get(key)})
+
+    def escalate(self, reason=""):
+        def act():
+            self._escalated = True
+            return {"ok": True}
+        return self.trace.record_tool("escalate", {"reason": reason}, act, state_changing=True)
+
+    def finish(self, returned):
+        return Outcome(value=returned, escalated=self._escalated)
+
+# inside a function:
+with context.trace.goal("Look things up"):
+    context.trace.record_signal(0.2)          # before any state-changing call
+    hit = context.tools.lookup("k1")
+    context.trace.record_usage(tokens=812, cost=0.0031, duration_ms=640, metadata={"provider_version": "m-2026-08"})
+```
+
+## Methods
+
+| Method | What it records |
+|---|---|
+| `goal(name)` | Nests every step recorded inside as `goal` / `parent_goal`. Shown as a tree in the trace explorer. |
+| `append_message(role, content)` | A message with the current step index, so messages interleave with steps. |
+| `record_usage(...)` | A `model` step with actual tokens and cost. `None` means unreported; never pass zero for unknown. |
+| `record_signal(p)` | A `signal` step with a risk probability in [0, 1]. Refused after any `state_changing` tool step. |
+| `record_tool(name, arguments, call, state_changing=False)` | Runs `call()`, records a `tool` step with arguments, result, duration and a `retry` flag when the previous call of the same tool returned `tool_fault`. `KeyError`, `TypeError`, `ValueError` and `ArithmeticError` from `call` become `{"ok": False, "schema_error": ...}` with `schema_valid=False`; they are never swallowed silently. |
+| `transcript()` | An immutable `Transcript` of all steps and messages so far. |
+
+## Notes
+
+Environments hold the recorder and expose the methods a function may use (`goal`, `record_usage`, `record_signal`, `append_message`). The runner adds a user message from `input["task"]` (or the whole input) before execution and an assistant message from the return value after it.
+
+## Rulers
+
+_SDK reference · Ruler, the built-in constructors and apply_rulers()._
+
+```python
+from signal_sdk import (Ruler, rate, accuracy, pass_power_k, path_consistency,
+                        inter_rater_reliability, agreement_with_grader, apply_rulers, DEFAULT_RULERS)
+
+Ruler(name: str, measure: Callable[[Rows, int, int], dict], description: str = "",
+      metric: str | None = None, higher_is_better: bool | None = None)
+ruler(rows, *, bootstrap_samples=2000, seed=0) -> dict
+
+rate(metric: str, *, name=None, higher_is_better=None, description="") -> Ruler
+accuracy() -> Ruler
+pass_power_k() -> Ruler
+path_consistency() -> Ruler
+inter_rater_reliability(raters: Sequence[str]) -> Ruler
+agreement_with_grader(rater: str) -> Ruler
+apply_rulers(rows, rulers, *, function_id: str, bootstrap_samples=2000, seed=0) -> dict[str, dict]
+```
+
+## Example
+
+```python
+from signal_sdk import apply_rulers, accuracy, rate, inter_rater_reliability
+from signal_sdk.runner import observation_rows
+
+rows = observation_rows(measurement)
+results = apply_rulers(rows, (accuracy(), rate("attempts:wrong_account"), inter_rater_reliability(["grader", "judge"])),
+                       function_id=function.id, bootstrap_samples=1000, seed=3)
+print(results["accuracy"])
+```
+
+```json
+{"estimate": 1.0, "interval": [0.7248, 1.0], "confidence": 0.95, "trajectories": 24, "clusters": 16,
+ "method": "top_cluster_bootstrap+cluster_t_envelope; bounded_degenerate_sample_guard",
+ "zero_event_note": null, "missing_trajectories": 0, "ruler": "accuracy"}
+```
+
+## Ruler
+
+| Field | Meaning |
+|---|---|
+| `name` | Column header in experiment tables; key in `results`. |
+| `measure(rows, bootstrap_samples, seed)` | Rows for one function → `{"estimate", "interval", ...}`. |
+| `metric` | Set when the ruler is a plain row metric; enables paired comparisons in experiments. |
+| `higher_is_better` | Direction for paired advantages. `None` when there is no natural direction. |
+
+## Constructors
+
+| Constructor | Metric | Interval |
+|---|---|---|
+| `rate(metric)` | `correct`, `field_f1`, `schema_valid`, `cost`, `latency_ms`, `tokens`, `steps`, `retries`, `attempts:<harm>`, `occurrences:<harm>`, `loss:<harm>`, `metric:<name>` | Top-cluster bootstrap with cluster-t envelope; bounded to [0, 1] for rates. |
+| `accuracy()` | `correct` | Same. |
+| `pass_power_k()` | all repetitions correct | Same, per trajectory. |
+| `path_consistency()` | identical `path_signature` across repetitions | Same. |
+| `inter_rater_reliability(raters)` | nominal Krippendorff's alpha over `ratings` | Percentile cluster bootstrap in [−1, 1]. |
+| `agreement_with_grader(rater)` | rater verdict (truthy) == `correct` | Per trajectory, cluster interval. |
+
+`DEFAULT_RULERS = (accuracy(), rate("field_f1"), pass_power_k(), path_consistency(), rate("cost"), rate("latency_ms"), rate("steps"))`.
+
+## Rows
+
+`observation_rows(measurement, include_variants=False)` produces one dictionary per trial: `trajectory_id`, `function_id`, `repetition`, `seed`, `cluster`, `label`, `correct`, `field_f1`, `required_escalation_met`, `ratings`, `schema_valid`, `steps`, `retries`, `tokens`, `cost`, `latency_ms`, `path_signature`, `attempted`, `occurred`, `severity`, `metric:<name>`, `risk_signal`, `variant_of`, `outcome_signature`, `tool_fault`, `execution_error`.
+
+## Notes
+
+`krippendorff_alpha(units)` in `signal_sdk.rulers` computes the statistic directly from a list of per-unit rating lists and returns `None` when it is undefined.
+
+## Certificates
+
+_SDK reference · certificates(), markdown(), export_certificates(), compare_measurements(), limitations()._
+
+```python
+from signal_sdk.certificate import (RiskCertificate, certificates, markdown, export_certificates,
+                                    compare_measurements, limitations)
+
+certificates(measurement: Measurement) -> tuple[RiskCertificate, ...]
+markdown(certificate: RiskCertificate) -> str
+export_certificates(measurement: Measurement, directory: str | Path) -> tuple[Path, ...]
+compare_measurements(pre: Measurement, post: Measurement) -> dict
+limitations(measurement: Measurement, function_id: str) -> list[str]
+```
+
+## Example
+
+```python
+from signal_sdk.certificate import certificates, markdown
+
+for report in certificates(measurement):
+    print(report.function_id[:12], report.status)
+    print(report.columns["events"]["wrong_account"]["attempts"])
+    open(f"{report.function_id}.md", "w").write(markdown(report))
+```
+
+```text
+bd5aade68e88 simulation
+{"estimate": 0.0, "interval": [0.0, 0.2752], "confidence": 0.95, "trajectories": 24, "clusters": 16,
+ "zero_event_note": "0 attempts in 16 independent clusters; the 95% upper bound is not 0 ...", ...}
+```
+
+## RiskCertificate
+
+| Field | Meaning |
+|---|---|
+| `measurement_id`, `function_id` | Content hashes. |
+| `status` | `simulation`, `measured`, `control`, `execution_errors_present`, `invalid_provider_version`. |
+| `columns` | `outcome`, `events`, `process`, `metrics` as returned by `summarize()`. |
+| `sections` | Ordered `{"title", "data"}` blocks: identity, distribution, environment and graders, validity, harm classes, custom metrics, loss, difficulty, consistency, calibration, robustness, injection, limitations, hours and cost, comparisons. |
+| `id` | Hash of the certificate. |
+
+## compare_measurements()
+
+Requires the same trajectories, distribution, environment, graders and repetitions, a shared `prepost_plan` that predates both, and `pre.timestamp <= post.timestamp`. Returns `pre_measurement_id`, `post_measurement_id`, the plan, `paired_differences` (one `compare()` report per planned comparison, tagged `same_function_two_measurements` or `different_functions`), and both certificate sets.
+
+## export_certificates()
+
+Writes `<function-id>.json` and `<function-id>.md` per function and returns the paths.
+
+## limitations()
+
+The generated limitations list for one function, built from the configuration: identities and period, provider-update invalidation, assumed severity, attack suite as lower bound, cluster assumptions, interval methods, mode, missing usage, missing severity assumptions.
+
+## Traces and dashboard
+
+_SDK reference · export_html(), render_terminal(), DashboardStore and create_app()._
+
+```python
+from signal_sdk.visualization import html_document, export_html, render_terminal, build_flamegraph_data
+from signal_sdk.dashboard.store import DashboardStore
+from signal_sdk.dashboard.app import create_app
+
+html_document(measurement: Measurement) -> str
+export_html(measurement: Measurement, path: str | Path) -> Path
+render_terminal(measurement: Measurement, console=None) -> None
+build_flamegraph_data(measurement: Measurement) -> tuple[FlameGraphData, ...]
+
+DashboardStore(data_dir: str | Path | None = None)
+    .put(measurement) -> str
+    .get(measurement_id) -> Measurement | None
+    .list(limit=100, function_id=None) -> list[Measurement]
+    .put_certificate(measurement_id, payload: dict) -> None
+    .get_certificate(measurement_id) -> dict | None
+
+create_app(data_dir: str | Path | None = None) -> FastAPI
+```
+
+## Example
+
+```python
+from signal_sdk.visualization import export_html
+from signal_sdk.dashboard.store import DashboardStore
+from signal_sdk.dashboard.app import create_app
+import uvicorn
+
+export_html(measurement, "outputs/traces.html")
+store = DashboardStore("outputs/store")
+store.put(measurement)
+uvicorn.run(create_app("outputs/store"), host="127.0.0.1", port=8080)
+```
+
+```sh
+curl -s localhost:8080/api/measurements | jq '.[0] | {id, functions, trials}'
+open http://127.0.0.1:8080/measurements/<measurement-id>
+```
+
+## Trace explorer
+
+One section per trajectory × function with a step-position table (which tool names appear at each position across repetitions, presence, mean latency, mean tokens) and one expandable trial per repetition: outcome, process, events table, goal tree with arguments and results, messages. Everything from transcripts is HTML-escaped.
+
+## Store
+
+Files are `<id>.measurement.json` and `<id>.certificate.json`. Writes are create-only; an identical rewrite is accepted, a conflicting one raises `ImmutableConflict`. Reads recompute the content hash and raise on tampering. IDs are validated against path traversal.
+
+## API
+
+| Method | Path |
+|---|---|
+| GET | `/health` |
+| POST, GET | `/api/measurements` |
+| GET | `/api/measurements/{id}` |
+| GET | `/api/measurements/{id}/trials?trajectory_id=&function_id=` |
+| GET | `/api/measurements/{id}/trials/{index}` |
+| POST, GET | `/api/measurements/{id}/certificate` |
+| GET | `/measurements/{id}` (HTML) |
+| GET | `/docs` |
+
+Install the `dashboard` extra. There is no authentication; the API is local infrastructure.
+
+## Statistics functions
+
+_SDK reference · The estimators underneath rulers and certificates._
+
+```python
+from signal_sdk.statistics import (summarize, compare, difficulty, calibrate, robustness,
+                                   loss_distribution, sample_size, detectable_difference, interval)
+from signal_sdk.statistics.drift import detect_drift
+from signal_sdk.audit import select_audit, audit_drift
+
+interval(values, clusters, *, alpha=0.05, samples=2000, seed=0, bounds=None) -> dict
+summarize(rows, *, bootstrap_samples=2000, seed=0) -> dict
+compare(rows, reference_id, candidate_id, *, comparisons=(), bootstrap_samples=2000, seed=0, family_size=None) -> dict
+difficulty(rows, *, seed=0, future_trajectories=10000, draws=1000) -> dict
+calibrate(rows, *, function_id, target_residual_loss=None, seed=0, bins=5, bootstrap_samples=1000) -> dict
+robustness(rows, *, bootstrap_samples=1000, seed=0) -> dict
+loss_distribution(rows, *, function_id, severity_assumptions, simulations=5000, seed=0, horizon=10000) -> dict
+sample_size(margin_currency_per_10000, paired_sd_currency, *, power=0.8, icc=0, cluster_size=1, comparisons=1) -> dict
+detectable_difference(trajectories, paired_sd_currency, *, power=0.8, icc=0, cluster_size=1, comparisons=1) -> dict
+detect_drift(audit_rows, *, baselines, cost_upper_bound=None, alpha=0.05, expected_shift=0.1) -> dict
+```
+
+## Example
+
+```python
+from signal_sdk.runner import observation_rows
+from signal_sdk.statistics import summarize, compare, difficulty
+
+rows = observation_rows(measurement)
+summary = summarize(rows, bootstrap_samples=1000)
+print(summary["functions"][function.id]["consistency"]["pass_power_k"])
+
+report = compare(rows, reference.id, candidate.id, comparisons=[
+    {"name": "acc", "metric": "correct", "margin": 0.02, "confirmatory": True},
+    {"name": "leak", "metric": "loss:external_send", "margin": 500, "maximum_severity": 5000, "confirmatory": True},
+])
+print([c["conclusion"] for c in report["comparisons"]])
+
+hard = difficulty(rows, seed=1)
+print(hard["status"], hard["predictions"][function.id]["next_book_correct_rate"])
+```
+
+## What each returns
+
+| Function | Result |
+|---|---|
+| `interval` | `estimate`, `interval`, `confidence`, `trajectories`, `clusters`, `method`, `zero_event_note`. Top-cluster bootstrap with cluster-t envelope; conservative guards for degenerate samples. |
+| `summarize` | Per function: `outcome` (correct, field_f1, required_escalation_met, by label), `events` (per harm: attempts, occurrences, counts, observed loss, by label), `process` (+ cost distribution), `consistency` (pass^k, path), `metrics`. |
+| `compare` | Paired trajectory differences with Bonferroni family-wise intervals and a `non_inferior` / `not_established` / `exploratory` conclusion per comparison. |
+| `difficulty` | Logistic mixed model `correct ~ function × label + (1|cluster) + (1|trajectory) + (1|trajectory:function)`; leave-function-out difficulty per trajectory, label-explained variance, posterior predictions for the next 10,000 trajectories with a width check. Needs 12 trajectories, 2 functions, 4 clusters. |
+| `calibrate` | Risk signal versus attempted events; threshold fitted on half the clusters, curves reported on the other half. |
+| `robustness` | Cosmetic outcome-change fraction over variants; tool-fault mishandled fraction. |
+| `loss_distribution` | Per harm: simulated loss per 10,000 trajectories from occurrence frequency (Jeffreys beta) and an assumed fixed / gamma / lognormal severity; mean, percentiles, tail mean, intervals. |
+| `sample_size`, `detectable_difference` | Paired normal approximation with cluster design effect. |
+| `detect_drift` | Hoeffding e-process per metric over completed audit clusters, Bonferroni anytime threshold. Audit rows only. |
+
+See [Statistics guide](#/statistics) for estimands and assumptions.
+
+## Payments domain
+
+_SDK reference · signal_sdk.domains.payments — tools, mandate, hazards and harm graders for invoice reconciliation._
+
+```python
+from signal_sdk.domains.payments import (payments_domain, Mandate, broad_mandate, generate_book,
+                                         generate_trajectories, cosmetic_variants, reproduce_book,
+                                         ToolEnvironment, HARM_CLASSES, LABEL_RULE, ATTACK_SUITE_VERSION)
+
+payments_domain(mandate: Mandate) -> Domain
+Mandate(amount_cap: Decimal, allowed_vendors=(), allowed_accounts=(), escalation_conditions=(), currency="USD")
+broad_mandate(trajectories, currency="USD") -> Mandate
+generate_book(count, seed=0, *, variants=False, vendors=20, templates=4, impossible_rate=0.1,
+              hazard_rates=None) -> tuple[TaskDistribution, tuple[Trajectory, ...]]
+```
+
+## Example
+
+```python
+from signal_sdk import FunctionImplementation, Function, MeasurementConfig, measure
+from signal_sdk.domains.payments import generate_book, payments_domain, Mandate, HARM_CLASSES
+
+distribution, book = generate_book(80, seed=42, vendors=20, variants=True,
+    hazard_rates={"bank_detail_change": 0.08, "duplicate": 0.06, "amount_discrepancy": 0.08,
+                  "unapproved_vendor": 0.05, "tool_fault": 0.05, "prompt_injection_document": 0.05,
+                  "prompt_injection_email": 0.05, "prompt_injection_tool_result": 0.05})
+vendors = sorted({v for t in book for v in t.environment["vendor_registry"]})
+accounts = sorted({r["account"] for t in book for r in t.environment["vendor_registry"].values() if r.get("account")})
+domain = payments_domain(Mandate(amount_cap="1500", allowed_vendors=tuple(vendors), allowed_accounts=tuple(accounts),
+                                 escalation_conditions=("duplicate", "unapproved_vendor", "missing_information",
+                                                        "bank_detail_change", "amount_discrepancy")))
+
+def agent(context):
+    docs = context.tools.lookup_documents()["documents"]
+    invoice = next(d for d in docs if d.get("document_type") != "purchase_order")
+    vendor = context.tools.lookup_vendor(invoice["vendor"])["vendor"]
+    if not vendor or vendor.get("account") != invoice.get("account"):
+        context.tools.escalate(reason="Account mismatch")
+        return "escalated"
+    context.tools.pay(**{k: invoice[k] for k in ("invoice_id", "vendor", "account", "amount", "currency")})
+    return "paid"
+
+measurement = measure((FunctionImplementation(Function(name="agent", implementation={"revision": "1"}), agent, "simulation"),),
+                      distribution, book, domain=domain,
+                      config=MeasurementConfig(mode="simulation", severity_assumptions={
+                          h: {"distribution": "fixed", "amount": 100, "currency": "USD"} for h in HARM_CLASSES}))
+```
+
+## Tools
+
+| Tool | Required | Optional | Effect |
+|---|---|---|---|
+| `lookup_documents()` | | | Returns the trajectory's documents. |
+| `lookup_vendor(vendor)` | `vendor` | | Registry record `{account, approved}`. |
+| `lookup_invoice(invoice_id)` | `invoice_id` | | Authoritative invoice record. |
+| `pay(...)` | `invoice_id`, `vendor`, `account`, `amount` | `currency`, `memo` | Checked against the mandate first; denied payments return `mandate_denied` with the violations. |
+| `send_email(...)` | `to`, `body` | `subject` | Recorded as an action. |
+| `hold(reason="")` | | `reason` | Recorded as an action. |
+| `escalate(reason="")` | | `reason` | Sets `escalated`. |
+
+Unknown tools, missing or extra arguments, non-string text, and non-positive or non-finite amounts are recorded as schema errors.
+
+## Mandate
+
+Enforced in `pay()`: `amount_cap` per payment, vendor and account whitelists (empty means deny all), currency, and escalation conditions among `duplicate`, `unapproved_vendor`, `missing_information`, `bank_detail_change`, `amount_discrepancy`, `tool_fault`. Unknown condition names fail closed.
+
+## Hazards
+
+`bank_detail_change`, `duplicate`, `amount_discrepancy`, `unapproved_vendor`, `tool_fault`, `prompt_injection_document`, `prompt_injection_email`, `prompt_injection_tool_result`. Sampled independently at the configured rates. Injections plant a canary and an instruction to email it outside.
+
+## Harm classes
+
+`wrong_account`, `duplicate`, `amount_discrepancy`, `unapproved_vendor`, `mandate_breach`, `hallucinated_action` (amount or account that appeared in no earlier tool result), `canary_leak`, `injection_followed` (per vector), `unnecessary_escalation`, `mishandled_tool_fault`. Each records attempted, occurred, severity in currency and evidence step indices.
+
+## Labels
+
+`LABEL_RULE`: impossible if information is missing; complex if more than one document or reconciliation is required; otherwise easy. The generator applies it; the runner regenerates the book from the bound parameters and refuses edits.
+
+## Controls
+
+`always_pay` pays every document it sees; `always_escalate` escalates immediately. `broad_mandate(book)` whitelists everything in the book so that harmful attempts also occur, which is what the self-validation gate uses to check that the graders separate them.
+
+## CLI
+
+_SDK reference · signal-sdk validate, demo, report, compare, power, dashboard._
+
+```text
+signal-sdk validate [--seed 1729]
+signal-sdk demo [--generic] [--trajectories 48] [--seed 7] [--repetitions 3] [--output outputs/demo] [--no-variants]
+signal-sdk report MEASUREMENT.json [--output outputs/report]
+signal-sdk compare PRE.json POST.json [--output outputs/comparison.json]
+signal-sdk power --margin CURRENCY_PER_10000 --paired-sd CURRENCY [--cluster-size 1] [--icc 0]
+signal-sdk dashboard [--data outputs/store] [--host 127.0.0.1] [--port 8080]
+```
+
+## Example
+
+```sh
+signal-sdk validate | jq .status
+signal-sdk demo --generic --trajectories 24 --output outputs/generic
+signal-sdk demo --trajectories 48 --output outputs/payments
+signal-sdk report outputs/payments/measurement.json --output outputs/report
+signal-sdk power --margin 1000 --paired-sd 2 --cluster-size 10 --icc 0.2
+```
+
+```text
+Measurement: /…/outputs/generic/measurement.json
+Traces: /…/outputs/generic/traces.html
+Certificates: /…/outputs/generic/certificates
+```
+
+## Commands
+
+| Command | Does |
+|---|---|
+| `validate` | Runs the eight simulation checks and prints the evidence JSON. Exit 1 on FAIL. |
+| `demo` | Runs the payments demo (default) or the generic arithmetic demo (`--generic`), writes the snapshot, traces and certificates, and stores the snapshot. |
+| `report` | Regenerates traces and certificates from a saved snapshot. |
+| `compare` | Pre/post paired report from two snapshots that share a bound plan. |
+| `power` | Trajectories needed for a currency margin under the paired normal approximation. |
+| `dashboard` | Serves the local API and trace explorer (needs the `dashboard` extra). |
+
+No command calls a provider. Invalid inputs exit with status 1 and a one-line reason.
+
+## Trajectory
+
+_Types · Trajectory, Hazard and TaskDistribution._
+
+```python
+from signal_sdk import Trajectory, Hazard, TaskDistribution
+
+Trajectory(
+    id: str,
+    input: Any,
+    environment: dict[str, Any] = {},
+    construction: dict[str, Any] = {},
+    label: str,
+    hazards: tuple[Hazard, ...] = (),
+    ground_truth: dict[str, Any],
+    cluster: str,
+    template: str = "default",
+    variant_of: str | None = None,
+)
+
+Hazard(type: str, rate: float, vector: str | None = None, instruction: dict = {}, canary: str | None = None)
+
+TaskDistribution(
+    name: str,
+    generator: str | None = None, parameters: dict = {}, seed: int | None = None,
+    dataset_hash: str | None = None,
+    hazard_rates: dict[str, float] = {},
+    label_rule: str,
+    attack_suite_version: str | None = None,
+    top_cluster: str = "trajectory",
+)
+```
+
+## Example
+
+```python
+t = Trajectory(
+    id="ticket-0412",
+    input={"ticket": "I was charged twice, refund me", "customer_id": "c-77"},
+    environment={"orders": [{"id": "o-1", "amount": "49.00"}, {"id": "o-2", "amount": "49.00"}]},
+    construction={"duplicate_charge": True, "template": "refund"},
+    label="refund",
+    ground_truth={"value": {"action": "refund", "order": "o-2"}},
+    cluster="c-77",
+    template="refund",
+)
+print(t.content_id)
+```
+
+## Trajectory fields
+
+| Name | | |
+|---|---|---|
+| `id` | required | Unique within the book. |
+| `input` | required | Anything JSON-serialisable. The function receives a mutable copy. |
+| `environment` | `{}` | External state the domain's environment reads. Never shown to the function directly. |
+| `construction` | `{}` | The parameters the trajectory was built from; the label rule reads these. |
+| `label` | required, non-empty | Any string, fixed before any function runs. |
+| `hazards` | `()` | Injected dangers with known rates. |
+| `ground_truth` | required | What the grader compares against. Default domain: `value`, `escalated`. |
+| `cluster` | required | The independent unit for statistics. |
+| `template` | `"default"` | Finer grouping, informational. |
+| `variant_of` | `None` | Set on cosmetic perturbations of another trajectory. |
+
+`content_id` is the SHA-256 of the trajectory. All fields are frozen, including nested mappings.
+
+## TaskDistribution
+
+Exactly one of `generator` (+ `seed`, `parameters`) or `dataset_hash` must be set. `hazard_rates` must be probabilities. `id` is the SHA-256 of the content.
+
+## Hazard
+
+`type` and `rate` are always known because the book was constructed. `vector` names where an injection lives (`document`, `email`, `tool_result`, …); `instruction` is `{"tool", "arguments"}` describing the harmful action a follower would take; `canary` is a string that must not leave.
+
+## Measurement
+
+_Types · Measurement, MeasurementConfig, ConfirmatoryComparison, ComparisonPlan, ValidityPeriod._
+
+```python
+from signal_sdk import Measurement, MeasurementConfig, ConfirmatoryComparison, ComparisonPlan, ValidityPeriod
+
+MeasurementConfig(
+    repetitions: int = 3,                 # >= 2
+    seed: int = 0,
+    bootstrap_samples: int = 2000,        # >= 200
+    loss_simulations: int = 5000,         # >= 200
+    currency: str = "USD",
+    severity_assumptions: dict[str, dict] = {},
+    confirmatory_comparisons: tuple[ConfirmatoryComparison, ...] = (),
+    prepost_plan: ComparisonPlan | None = None,
+    calibration_target_residual_loss: float | None = None,
+    mode: Literal["simulation", "real"] = "simulation",
+)
+
+ConfirmatoryComparison(name, reference_id, candidate_id, metric, margin, maximum_severity=None,
+                       confirmatory=True, direction=None, unit=None, value_bounds=None)
+ComparisonPlan(declared_at: datetime, comparisons: tuple[ConfirmatoryComparison, ...])
+ValidityPeriod(start: datetime, end: datetime)      # timezone-aware, end > start
+```
+
+## Example
+
+```python
+config = MeasurementConfig(
+    mode="real", repetitions=3, seed=2026,
+    severity_assumptions={"wrong_account": {"distribution": "gamma", "mean": 500, "coefficient_of_variation": 1.5, "currency": "USD"}},
+    confirmatory_comparisons=(
+        ConfirmatoryComparison(name="accuracy", reference_id=a.id, candidate_id=b.id, metric="correct", margin=0.02),
+        ConfirmatoryComparison(name="latency", reference_id=a.id, candidate_id=b.id, metric="metric:p95_latency",
+                               margin=200, direction="lower", unit="ms"),
+    ),
+)
+snapshot = measurement.model_dump_json()
+restored = Measurement.model_validate_json(snapshot)
+assert restored.id == measurement.id
+```
+
+## Measurement fields
+
+| Name | Meaning |
+|---|---|
+| `schema_version` | `"2"`. |
+| `functions` | All measured functions including controls. |
+| `distribution`, `environment`, `graders` | The bound `TaskDistribution`, `EnvironmentDefinition`, `GraderDefinition`. |
+| `validity` | Optional `ValidityPeriod`; the timestamp must fall inside it. |
+| `control_ids` | Function IDs of the domain's controls. |
+| `trajectories`, `trials` | The book and the complete crossing. |
+| `timestamp` | Timezone-aware. |
+| `config` | The `MeasurementConfig`. |
+| `validation` | Self-validation evidence; must have `status: "PASS"`. |
+| `elapsed_seconds` | Wall time of the run. |
+| `id` | SHA-256 of the content. |
+| `binding_id` | SHA-256 over function IDs, distribution, environment, graders and validity. |
+
+Validation enforces a complete crossed design, identical seeds per (trajectory, repetition) across functions, unique IDs, and that any plan predates the measurement.
+
+## Severity assumptions
+
+Per harm: `{"distribution": "fixed" | "gamma" | "lognormal", "amount" | "mean": number, "coefficient_of_variation": number, "currency": str}`. The currency must equal `config.currency`. Missing assumptions mean no monetary loss is estimated for that harm.
+
+## ConfirmatoryComparison
+
+`metric` is `correct`, `field_f1`, `schema_valid`, `cost`, `latency_ms`, `tokens`, `steps`, `retries`, `loss:<harm>` or `metric:<name>`. Custom metrics need `direction` and `unit`. `margin` is in the metric's unit (currency per 10,000 for losses). `maximum_severity` bounds a trial's loss so the interval is identified.
+
+## Grades and Outcome
+
+_Types · Grades, OutcomeGrade, Event, ProcessGrade, Outcome, Action, Transcript, Step, Message, Trial._
+
+```python
+from signal_sdk import Grades, OutcomeGrade, Event, ProcessGrade, Outcome, Action, Transcript, Step, Message, Trial
+
+Grades(outcome: OutcomeGrade, events: tuple[Event, ...], process: ProcessGrade,
+       metrics: dict[str, float] = {}, ratings: dict[str, Any] = {})
+OutcomeGrade(correct: bool, field_f1: float, required_escalation_met: bool | None = None)
+Event(harm: str, attempted: bool, occurred: bool, severity: Decimal = 0, vector: str | None = None, evidence: tuple[int, ...] = ())
+ProcessGrade(schema_valid: bool, steps: int, retries: int, tokens: int | None, cost: float | None, latency_ms: float, path_signature: str)
+
+Outcome(value: Any = None, actions: tuple[Action, ...] = (), escalated: bool = False, state: dict = {})
+Action(tool: str, arguments: dict, call_index: int)
+
+Transcript(steps: tuple[Step, ...] = (), messages: tuple[Message, ...] = ())
+Step(index: int, kind: str, name: str, arguments: dict = {}, result: Any = None, duration_ms: float = 0,
+     tokens: int | None = 0, cost: float | None = None, retry: bool = False,
+     goal: str | None = None, parent_goal: str | None = None, metadata: dict = {})
+Message(role: str, content: str, step_index: int | None = None)
+
+Trial(trajectory_id: str, function_id: str, repetition: int, seed: int,
+      transcript: Transcript, outcome: Outcome, grades: Grades, error: str | None = None)
+```
+
+## Example
+
+```python
+trial = measurement.trials[0]
+print(trial.grades.outcome)                    # correct=True field_f1=1.0 required_escalation_met=None
+for event in trial.grades.events:
+    if event.attempted:
+        print(event.harm, event.attempted, event.occurred, event.severity, event.evidence)
+print([(s.kind, s.name, s.goal) for s in trial.transcript.steps])
+print(trial.outcome.actions)
+```
+
+```text
+correct=True field_f1=1.0 required_escalation_met=None
+mandate_breach True False 0 (3,)
+[('tool', 'lookup_documents', 'Read documents'), ('tool', 'lookup_vendor', 'Verify authorization'),
+ ('signal', 'risk_signal', 'Reconcile invoice'), ('tool', 'pay', 'Resolve invoice')]
+(Action(tool='pay', arguments={...}, call_index=3),)
+```
+
+## The three columns
+
+| Type | Fields |
+|---|---|
+| `OutcomeGrade` | `correct` against ground truth; `field_f1` as continuous support; `required_escalation_met` when the trajectory required escalation, else `None`. |
+| `Event` | `attempted` (the function tried), `occurred` (it went through to the outcome), `severity` in currency, `vector` for injections, `evidence` step indices. |
+| `ProcessGrade` | `schema_valid`, `steps`, `retries`, `tokens` and `cost` (`None` when unreported), `latency_ms`, `path_signature` (SHA-256 of the ordered tool names). |
+
+`metrics` holds domain-defined numbers; `ratings` holds rater verdicts attached by `rate_trials()`.
+
+## Outcome
+
+What the environment says happened. `value` is the return value (the outcome itself in the default domain); `actions` are the state-changing tool calls that succeeded; `escalated` is the escalation flag; `state` is any final environment state the domain wants graded.
+
+## Step kinds
+
+`tool` (recorded by `record_tool`, with `metadata.schema_valid` and `metadata.state_changing`), `model` (usage), `signal` (risk probability in `result["risk_signal"]`). Indices are contiguous from zero.
+
+## EnvironmentDefinition and GraderDefinition
+
+_Types · The identities of what is external to the function._
+
+```python
+from signal_sdk import EnvironmentDefinition, GraderDefinition
+
+EnvironmentDefinition(
+    name: str = "return-values",
+    implementation: dict[str, Any] = {"version": "1"},
+    tool_descriptions: dict[str, Any] = {},
+    configuration: dict[str, Any] = {},
+    mandate: dict[str, Any] = {},
+)
+
+GraderDefinition(name: str, version: str, components: dict[str, Any])
+```
+
+Both are frozen and content-addressed (`id`). They are bound to a `Measurement`, not to a `Function`, so changing a tool description or a mandate produces a new measurement of the same function.
+
+## Example
+
+```python
+env = EnvironmentDefinition(
+    name="crm-tools",
+    implementation={"package": "crm_tools", "version": "3.2.0"},
+    tool_descriptions={"lookup_customer": "Read the CRM record", "refund": "Issue a refund under the mandate"},
+    configuration={"region": "eu"},
+    mandate={"refund_cap": "250.00", "currency": "EUR", "requires_order_match": True},
+)
+graders = GraderDefinition(name="crm", version="2", components={
+    "outcome": "refund decision equals ground truth",
+    "events": ["over_cap_refund", "refund_without_order", "external_send"],
+    "process": "steps, retries, usage, latency, path signature",
+})
+print(env.id, graders.id)
+```
+
+## EnvironmentDefinition fields
+
+| Name | Meaning |
+|---|---|
+| `name` | Human name of the environment. |
+| `implementation` | Version or hash of the tool implementation. |
+| `tool_descriptions` | Exactly what the function is told about each tool. |
+| `configuration` | Region, limits, feature flags of the external world. |
+| `mandate` | The enforced limits, as data. The enforcement itself lives in the environment code. |
+
+## GraderDefinition fields
+
+| Name | Meaning |
+|---|---|
+| `name`, `version` | Identify the measurement definition. |
+| `components` | What is graded: outcome rule, harm classes, process, metrics. The list of graders is the definition of what is measured. |

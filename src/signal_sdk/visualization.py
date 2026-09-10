@@ -28,7 +28,7 @@ class StepStats:
 
 @dataclass(frozen=True)
 class FlameGraphData:
-    episode_id: str
+    trajectory_id: str
     function_id: str
     trials: int
     correct: int
@@ -42,9 +42,9 @@ def build_flamegraph_data(measurement: Measurement) -> tuple[FlameGraphData, ...
     """Retain sequence distributions without attributing final failure to a step."""
     grouped: dict[tuple[str, str], list[Trial]] = defaultdict(list)
     for trial in measurement.trials:
-        grouped[(trial.episode_id, trial.function_id)].append(trial)
+        grouped[(trial.trajectory_id, trial.function_id)].append(trial)
     graphs = []
-    for (episode_id, function_id), trials in sorted(grouped.items()):
+    for (trajectory_id, function_id), trials in sorted(grouped.items()):
         steps = []
         for position in range(max((len(t.transcript.steps) for t in trials), default=0)):
             present = [t.transcript.steps[position] for t in trials if len(t.transcript.steps) > position]
@@ -58,7 +58,7 @@ def build_flamegraph_data(measurement: Measurement) -> tuple[FlameGraphData, ...
             ))
         costs = [t.grades.process.cost for t in trials]
         graphs.append(FlameGraphData(
-            episode_id=episode_id,
+            trajectory_id=trajectory_id,
             function_id=function_id,
             trials=len(trials),
             correct=sum(t.grades.outcome.correct for t in trials),
@@ -176,8 +176,8 @@ def _trial_html(trial: Trial, ordinal: int) -> str:
       <span>{process.latency_ms:.1f} ms &middot; {_money(process.cost)}</span></summary>
       {error}<div class="grade-columns">
       <section><h3>Outcome</h3><dl><dt>Correct final state</dt><dd>{outcome.correct}</dd>
-      <dt>Field F1</dt><dd>{outcome.field_f1:.3f}</dd><dt>Impossible escalated</dt>
-      <dd>{_escape(outcome.impossible_escalated)}</dd></dl>
+      <dt>Field F1</dt><dd>{outcome.field_f1:.3f}</dd><dt>Required escalation met</dt>
+      <dd>{_escape(outcome.required_escalation_met)}</dd></dl>
       <details><summary>Outcome after trial</summary><pre>{_json(trial.outcome)}</pre></details></section>
       <section><h3>Process</h3><dl><dt>Schema valid</dt><dd>{process.schema_valid}</dd>
       <dt>Steps / retries</dt><dd>{process.steps} / {process.retries}</dd>
@@ -240,11 +240,11 @@ def html_document(measurement: Measurement) -> str:
               <td>{step.avg_duration_ms:.1f} ms</td><td>{_tokens(step.avg_tokens)}</td></tr>""")
         trials_html = []
         for trial in measurement.trials:
-            if (trial.episode_id, trial.function_id) == (graph.episode_id, graph.function_id):
+            if (trial.trajectory_id, trial.function_id) == (graph.trajectory_id, graph.function_id):
                 trials_html.append(_trial_html(trial, ordinal))
                 ordinal += 1
         cells.append(f"""<section class="cell" data-function="{_escape(graph.function_id)}"
-          data-episode="{_escape(graph.episode_id)}"><h2>{_escape(graph.episode_id)}</h2>
+          data-trajectory="{_escape(graph.trajectory_id)}"><h2>{_escape(graph.trajectory_id)}</h2>
           <div>{_escape(_function_label(function))}</div>
           <p class="identity">{_escape(graph.function_id)}</p>
           <div class="cell-summary"><span>Correct final state: {graph.correct}/{graph.trials} trials</span>
@@ -258,25 +258,25 @@ def html_document(measurement: Measurement) -> str:
         f'<option value="{_escape(f.id)}">{_escape(_function_label(f))} / {_escape(f.id[:12])}</option>'
         for f in measurement.functions
     )
-    episode_options = "".join(
-        f'<option value="{_escape(e.id)}">{_escape(e.id)}</option>' for e in measurement.episodes
+    trajectory_options = "".join(
+        f'<option value="{_escape(e.id)}">{_escape(e.id)}</option>' for e in measurement.trajectories
     )
     return f"""<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
       <meta name="viewport" content="width=device-width, initial-scale=1">
       <title>Signal measurement {_escape(measurement.id[:12])}</title><style>{_STYLE}</style></head>
       <body><header><h1>Signal measurement</h1><div class="identity">{_escape(measurement.id)}</div>
       <p class="muted">{_escape(measurement.timestamp.isoformat())} &middot;
-      {sum(e.variant_of is None for e in measurement.episodes)} episodes &middot;
-      {sum(e.variant_of is not None for e in measurement.episodes)} cosmetic variants &middot; {len(measurement.functions)} functions &middot;
+      {sum(e.variant_of is None for e in measurement.trajectories)} trajectories &middot;
+      {sum(e.variant_of is not None for e in measurement.trajectories)} cosmetic variants &middot; {len(measurement.functions)} functions &middot;
       {len(measurement.trials)} trials</p></header><main><div class="toolbar">
       <label>Function<select id="function-filter"><option value="">All functions</option>{function_options}</select></label>
-      <label>Episode<select id="episode-filter"><option value="">All episodes</option>{episode_options}</select></label>
+      <label>Trajectory<select id="trajectory-filter"><option value="">All trajectories</option>{trajectory_options}</select></label>
       </div>{''.join(cells) or '<p>No recorded trials.</p>'}</main>
       <footer>Signal &middot; Measurement {_escape(measurement.id[:12])}</footer>
       <script>const ff=document.getElementById('function-filter');
-      const ef=document.getElementById('episode-filter');
+      const ef=document.getElementById('trajectory-filter');
       function filter(){{document.querySelectorAll('.cell').forEach(cell=>{{
-      cell.hidden=(ff.value && cell.dataset.function!==ff.value)||(ef.value && cell.dataset.episode!==ef.value);
+      cell.hidden=(ff.value && cell.dataset.function!==ff.value)||(ef.value && cell.dataset.trajectory!==ef.value);
       }});}}ff.addEventListener('change',filter);ef.addEventListener('change',filter);</script>
       </body></html>"""
 
@@ -298,7 +298,7 @@ def render_terminal(measurement: Measurement, console: Any = None) -> None:
     console = console or Console()
     console.print(Text(f"Signal measurement {measurement.id}", style="bold"))
     for graph in build_flamegraph_data(measurement):
-        console.print(Text(f"Episode {graph.episode_id} | Function {graph.function_id}"))
+        console.print(Text(f"Trajectory {graph.trajectory_id} | Function {graph.function_id}"))
         console.print(Text(
             f"Outcome: {graph.correct}/{graph.trials} correct final states | "
             f"Process: cost {_money(graph.recorded_cost)} ({graph.missing_cost_trials} unreported), "
@@ -311,7 +311,7 @@ def render_terminal(measurement: Measurement, console: Any = None) -> None:
             ), f"{step.present_count}/{step.total_trials}", f"{step.avg_duration_ms:.1f}", _tokens(step.avg_tokens))
         console.print(table)
         for trial in measurement.trials:
-            if (trial.episode_id, trial.function_id) != (graph.episode_id, graph.function_id):
+            if (trial.trajectory_id, trial.function_id) != (graph.trajectory_id, graph.function_id):
                 continue
             console.print(Text(f"  Repetition {trial.repetition}, seed {trial.seed}"))
             for event in trial.grades.events:

@@ -36,13 +36,13 @@ def limitations(measurement: Measurement, function_id: str) -> list[str]:
         f"Severity is assumed. Configured severity distributions: {json.dumps(thaw(measurement.config.severity_assumptions), sort_keys=True)}.",
         (f"The attack suite {measurement.distribution.attack_suite_version} gives a lower bound on attack exposure; untested attacks are outside this measurement."
          if measurement.distribution.attack_suite_version else "No attack suite was injected; this measurement says nothing about adversarial inputs."),
-        "The unit is the episode. Repetitions are dependent; top-level clusters are assumed exchangeable and independent. Shared effects across declared clusters invalidate these intervals.",
+        "The unit is the trajectory. Repetitions are dependent; top-level clusters are assumed exchangeable and independent. Shared effects across declared clusters invalidate these intervals.",
         "Confidence intervals use a top-cluster bootstrap with a cluster-t envelope and conservative bounded-sample guards. Coverage is approximate, especially with few clusters.",
         "Difficulty and loss predictions depend on printed model and severity assumptions. A 95% posterior interval is not a frequentist coverage guarantee.",
         "Frequency measures attempted events; monetary loss uses occurred events. One action may trigger multiple harm classes; class losses are not summed into an insured total.",
         "Only the listed deterministic graders define measured harms. Omitted harms and a function's textual claims provide no evidence of safe final state.",
         "Calibration measures association with attempts; review curves assume loss prevention by review. They do not implement a router or establish a causal effect of human review.",
-        "Drift is measured only on randomly selected, human-reviewed operational episodes judged safe; this constructed measurement alone does not measure drift.",
+        "Drift is measured only on randomly selected, human-reviewed operational trajectories judged safe; this constructed measurement alone does not measure drift.",
         "Function adapters are trusted instrumentation. The Python environment is not a security sandbox, and content hashes provide integrity checks, not a digital signature or external timestamp attestation.",
         f"Simulation self-validation status: {measurement.validation.get('status', 'missing')}. Passing finite seeded checks does not establish validity in every statistical regime.",
     ]
@@ -63,7 +63,7 @@ def certificates(measurement: Measurement) -> tuple[RiskCertificate, ...]:
     hard = difficulty(rows, seed=config.seed)
     robust = robustness(observation_rows(measurement, include_variants=True),
                         bootstrap_samples=config.bootstrap_samples, seed=config.seed)
-    labels = Counter(e.label.value for e in measurement.episodes if not e.variant_of)
+    labels = Counter(e.label for e in measurement.trajectories if not e.variant_of)
     comparisons = _within_comparisons(measurement, rows)
     reports = []
     for function in measurement.functions:
@@ -99,7 +99,7 @@ def certificates(measurement: Measurement) -> tuple[RiskCertificate, ...]:
                                  "environment, tool or mandate change", "distribution change", "grader change", "period expiry"]}},
                 {"title": "Harm classes", "data": stats["events"]},
                 {"title": "Custom metrics", "data": stats["metrics"]},
-                {"title": "Loss per 10,000 episodes", "data": loss},
+                {"title": "Loss per 10,000 trajectories", "data": loss},
                 {"title": "Book difficulty", "data": {"label_counts": dict(labels),
                     "outcome": stats["outcome"], "mixed_model": {k: v for k, v in hard.items() if k not in {"empirical_difficulty", "predictions"}},
                     "empirical_difficulty": hard.get("empirical_difficulty", {}).get(fid), "prediction": prediction}},
@@ -135,9 +135,9 @@ def _within_comparisons(measurement: Measurement, rows: list[dict]) -> list[dict
 
 
 def compare_measurements(pre: Measurement, post: Measurement) -> dict:
-    """Compare the same episodes as pairs, using a plan bound before execution."""
-    if pre.distribution.id != post.distribution.id or content_hash(pre.episodes) != content_hash(post.episodes):
-        raise ValueError("Pre/post comparisons require identical episode contents and distribution")
+    """Compare the same trajectories as pairs, using a plan bound before execution."""
+    if pre.distribution.id != post.distribution.id or content_hash(pre.trajectories) != content_hash(post.trajectories):
+        raise ValueError("Pre/post comparisons require identical trajectory contents and distribution")
     if pre.environment.id != post.environment.id or pre.graders.id != post.graders.id:
         raise ValueError("Pre/post comparisons require the same environment and graders")
     if pre.timestamp > post.timestamp:
@@ -215,7 +215,7 @@ def markdown(certificate: RiskCertificate) -> str:
                           "| Component | SHA-256 |", "|---|---|"])
             lines.extend(f"| {k} | `{v}` |" for k, v in data["component_hashes"].items())
             lines.append("")
-        elif section["title"] == "Loss per 10,000 episodes":
+        elif section["title"] == "Loss per 10,000 trajectories":
             lines.extend(["| Harm | Mean | 95th percentile | 99th percentile | Expected-loss interval |",
                           "|---|---:|---:|---:|---|"])
             for harm, result in data["harms"].items():
@@ -233,19 +233,19 @@ def markdown(certificate: RiskCertificate) -> str:
             lines.extend([f"Labels: {json.dumps(data['label_counts'], sort_keys=True)}.", "",
                           f"Correct final state: {_rate(data['outcome']['correct'])}.", "",
                           f"Field-level F1: {_rate(data['outcome']['field_f1'])}.", "",
-                          f"Escalation when impossible: {_rate(data['outcome']['impossible_escalated'])}.", ""])
+                          f"Escalated when escalation was required: {_rate(data['outcome']['required_escalation_met'])}.", ""])
             model = data["mixed_model"]
             lines.extend([f"Mixed model: {model.get('status')}. {model.get('method', model.get('reason', ''))}", ""])
             if "label_explained_latent_fraction" in model:
                 lines.extend([f"Label-explained latent variance fraction: {model['label_explained_latent_fraction']:.4g}.", ""])
             empirical = data.get("empirical_difficulty")
             if empirical and empirical.get("status") == "estimated":
-                values = list(empirical["episodes"].values())
-                lines.extend([f"Leave-function-out estimated failure probabilities across episodes: {min(values):.3f} to {max(values):.3f}. Full per-episode estimates are in the JSON certificate.", ""])
+                values = list(empirical["trajectories"].values())
+                lines.extend([f"Leave-function-out estimated failure probabilities across trajectories: {min(values):.3f} to {max(values):.3f}. Full per-trajectory estimates are in the JSON certificate.", ""])
             if data.get("prediction"):
                 prediction = data["prediction"]
                 lines.extend([f"Measured-book expected correctness: {_rate(prediction['observed_book_expected_correct_rate'])}.", "",
-                              f"Next 10,000 episode correctness: {_rate(prediction['next_book_correct_rate'])} (posterior prediction).", "",
+                              f"Next 10,000 trajectory correctness: {_rate(prediction['next_book_correct_rate'])} (posterior prediction).", "",
                               f"Prediction-width check: {'PASS' if prediction['prediction_wider_than_measured_interval'] else 'FAIL' }.", ""])
         elif section["title"] == "Consistency and process":
             consistency = data["consistency"]
@@ -261,7 +261,7 @@ def markdown(certificate: RiskCertificate) -> str:
             if data["status"] != "estimated":
                 lines.extend([data["reason"], ""])
             else:
-                lines.extend([f"Chosen threshold: {data['chosen_threshold']:.6g}; fitted on {data['split']['training_episodes']} episodes and reported on {data['split']['test_episodes']} episodes from disjoint clusters.", "",
+                lines.extend([f"Chosen threshold: {data['chosen_threshold']:.6g}; fitted on {data['split']['training_trajectories']} trajectories and reported on {data['split']['test_trajectories']} trajectories from disjoint clusters.", "",
                               "| Signal bin | Mean signal | Attempt rate [interval] |", "|---|---:|---|"])
                 lines.extend(f"| {p['bin']} | {p['mean_signal']:.3f} | {_rate(p['attempt_rate'])} |" for p in data["calibration_curve"])
                 lines.extend(["", "| Threshold | Review fraction [interval] | Residual loss / 10,000 [interval] |", "|---:|---|---|"])

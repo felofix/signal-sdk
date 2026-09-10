@@ -9,7 +9,7 @@ from decimal import Decimal
 from enum import Enum
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
 
 
 class FrozenDict(dict):
@@ -84,6 +84,8 @@ class FrozenModel(BaseModel):
 
 
 class Label(str, Enum):
+    """A suggested vocabulary. Labels are free strings; the creator of a book decides the rule."""
+
     EASY = "easy"
     COMPLEX = "complex"
     IMPOSSIBLE = "impossible"
@@ -123,7 +125,7 @@ class TaskDistribution(FrozenModel):
     hazard_rates: dict[str, float] = Field(default_factory=dict)
     label_rule: str = Field(min_length=1)
     attack_suite_version: str | None = None
-    top_cluster: str = "episode"
+    top_cluster: str = "trajectory"
 
     @model_validator(mode="after")
     def construction_bound(self) -> TaskDistribution:
@@ -213,17 +215,22 @@ class Hazard(FrozenModel):
     canary: str | None = None
 
 
-class Episode(FrozenModel):
+class Trajectory(FrozenModel):
     id: str
     input: Any
     environment: dict[str, Any] = Field(default_factory=dict)
     construction: dict[str, Any] = Field(default_factory=dict)
-    label: Label
+    label: str = Field(min_length=1)
     hazards: tuple[Hazard, ...] = ()
     ground_truth: dict[str, Any]
     cluster: str
     template: str = "default"
     variant_of: str | None = None
+
+    @field_validator("label", mode="before")
+    @classmethod
+    def plain_label(cls, value: Any) -> Any:
+        return value.value if isinstance(value, Enum) else value
 
     @computed_field
     @property
@@ -288,7 +295,7 @@ class Event(FrozenModel):
 class OutcomeGrade(FrozenModel):
     correct: bool
     field_f1: float = Field(ge=0, le=1)
-    impossible_escalated: bool | None = None
+    required_escalation_met: bool | None = None
 
 
 class ProcessGrade(FrozenModel):
@@ -302,14 +309,17 @@ class ProcessGrade(FrozenModel):
 
 
 class Grades(FrozenModel):
+    """Three columns plus optional extras; nothing here is ever combined into one score."""
+
     outcome: OutcomeGrade
     events: tuple[Event, ...]
     process: ProcessGrade
     metrics: dict[str, float] = Field(default_factory=dict)
+    ratings: dict[str, Any] = Field(default_factory=dict)
 
 
 class Trial(FrozenModel):
-    episode_id: str
+    trajectory_id: str
     function_id: str
     repetition: int = Field(ge=0)
     seed: int = Field(ge=0)
@@ -393,7 +403,7 @@ class Measurement(FrozenModel):
     graders: GraderDefinition
     validity: ValidityPeriod | None = None
     control_ids: tuple[str, ...] = ()
-    episodes: tuple[Episode, ...]
+    trajectories: tuple[Trajectory, ...]
     trials: tuple[Trial, ...]
     timestamp: datetime
     config: MeasurementConfig
@@ -402,10 +412,10 @@ class Measurement(FrozenModel):
 
     @model_validator(mode="after")
     def crossed(self) -> Measurement:
-        episode_ids = {e.id for e in self.episodes}
+        trajectory_ids = {e.id for e in self.trajectories}
         function_ids = {f.id for f in self.functions}
-        if not episode_ids or len(episode_ids) != len(self.episodes):
-            raise ValueError("Episodes must be nonempty and have unique IDs")
+        if not trajectory_ids or len(trajectory_ids) != len(self.trajectories):
+            raise ValueError("Trajectories must be nonempty and have unique IDs")
         if not function_ids or len(function_ids) != len(self.functions):
             raise ValueError("Functions must be nonempty and have unique IDs")
         if self.timestamp.tzinfo is None:
@@ -418,14 +428,14 @@ class Measurement(FrozenModel):
             raise ValueError("Measurement timestamp is outside its validity period")
         if not set(self.control_ids) <= function_ids:
             raise ValueError("Control identities must belong to the measured crossing")
-        expected = {(e, f, r) for e in episode_ids for f in function_ids
+        expected = {(e, f, r) for e in trajectory_ids for f in function_ids
                     for r in range(self.config.repetitions)}
-        observed = {(t.episode_id, t.function_id, t.repetition) for t in self.trials}
+        observed = {(t.trajectory_id, t.function_id, t.repetition) for t in self.trials}
         if observed != expected or len(observed) != len(self.trials):
             raise ValueError("Measurement must have a complete crossed trial design")
         seeds: dict[tuple[str, int], int] = {}
         for trial in self.trials:
-            key = (trial.episode_id, trial.repetition)
+            key = (trial.trajectory_id, trial.repetition)
             if key in seeds and seeds[key] != trial.seed:
                 raise ValueError("All functions must use the same seeds for paired trials")
             seeds[key] = trial.seed
@@ -448,7 +458,7 @@ class Measurement(FrozenModel):
 
 
 class AuditSample(FrozenModel):
-    episode_id: str
+    trajectory_id: str
     function_id: str
     cluster: str
     timestamp: datetime
@@ -464,5 +474,5 @@ class AuditSample(FrozenModel):
         if self.timestamp.tzinfo is None:
             raise ValueError("An audit timestamp needs a timezone")
         if not (self.judged_safe and self.selected_for_audit and self.human_reviewed):
-            raise ValueError("Drift accepts only randomly audited, human-reviewed safe episodes")
+            raise ValueError("Drift accepts only randomly audited, human-reviewed safe trajectories")
         return self

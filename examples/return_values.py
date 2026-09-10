@@ -7,16 +7,16 @@ the measurement, not to the function.
 
 from pathlib import Path
 
-from signal_sdk import Episode, Function, FunctionImplementation, Label, MeasurementConfig, dataset_distribution, measure
+from signal_sdk import Trajectory, Function, FunctionImplementation, Label, MeasurementConfig, dataset_distribution, measure
 from signal_sdk.certificate import export_certificates
 from signal_sdk.visualization import export_html
 
-episodes = tuple(
-    Episode(id=f"upper-{i:03d}", input={"task": f"Uppercase: {word}"}, label=Label.EASY,
+trajectories = tuple(
+    Trajectory(id=f"upper-{i:03d}", input={"task": f"Uppercase: {word}"}, label=Label.EASY,
             ground_truth={"value": word.upper()}, cluster=f"group-{i // 3}")
-    for i, word in enumerate(["signal", "measure", "episode", "trial", "grader", "outcome", "process", "event", "loss"])
+    for i, word in enumerate(["signal", "measure", "trajectory", "trial", "grader", "outcome", "process", "event", "loss"])
 )
-distribution = dataset_distribution("Uppercase words", episodes, label_rule="all easy", top_cluster="group")
+distribution = dataset_distribution("Uppercase words", trajectories, label_rule="all easy", top_cluster="group")
 
 
 def upper(context):
@@ -25,7 +25,7 @@ def upper(context):
 
 
 function = Function(name="upper", implementation={"module": __name__, "callable": "upper", "revision": "1"})
-measurement = measure((FunctionImplementation(function, upper, kind="simulation"),), distribution, episodes,
+measurement = measure((FunctionImplementation(function, upper, kind="simulation"),), distribution, trajectories,
                       config=MeasurementConfig(mode="simulation", repetitions=2, bootstrap_samples=300, loss_simulations=300))
 output = Path("outputs/return_values")
 export_certificates(measurement, output / "certificates")

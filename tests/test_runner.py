@@ -11,52 +11,52 @@ from signal_sdk.runner import FunctionImplementation, _execute, measure
 
 
 def payments(count=2, **kwargs):
-    distribution, episodes = generate_book(count, **kwargs)
-    return distribution, episodes, payments_domain(demo_mandate(episodes))
+    distribution, trajectories = generate_book(count, **kwargs)
+    return distribution, trajectories, payments_domain(demo_mandate(trajectories))
 
 
 def test_gate_stops_execution(monkeypatch):
-    distribution, episodes, domain = payments()
+    distribution, trajectories, domain = payments()
     monkeypatch.setattr("signal_sdk.validation.self_validate", lambda: {"status": "FAIL"})
     called = []
     with pytest.raises(RuntimeError, match="Self-validation failed"):
         measure((FunctionImplementation(demo_definition(), lambda ctx: called.append(ctx), "simulation"),),
-                distribution, episodes, domain=domain, config=MeasurementConfig(mode="simulation"))
+                distribution, trajectories, domain=domain, config=MeasurementConfig(mode="simulation"))
     assert not called
 
 
 def test_modified_generator_book_rejected():
-    distribution, episodes, domain = payments()
-    changed = episodes[0].model_copy(update={"ground_truth": {"payments": []}})
+    distribution, trajectories, domain = payments()
+    changed = trajectories[0].model_copy(update={"ground_truth": {"payments": []}})
     with pytest.raises(ValueError, match="reproduce"):
         measure((FunctionImplementation(demo_definition(), reconcile, "simulation"),), distribution,
-                (changed, *episodes[1:]), domain=domain)
+                (changed, *trajectories[1:]), domain=domain)
 
 
 def test_generated_book_needs_a_reproducing_domain():
-    distribution, episodes, _ = payments()
+    distribution, trajectories, _ = payments()
     with pytest.raises(ValueError, match="dataset_distribution"):
-        measure((FunctionImplementation(demo_definition(), reconcile, "simulation"),), distribution, episodes,
+        measure((FunctionImplementation(demo_definition(), reconcile, "simulation"),), distribution, trajectories,
                 domain=RETURN_VALUES, config=MeasurementConfig(mode="simulation"))
 
 
 def test_real_cannot_use_simulation_mode():
-    distribution, episodes, domain = payments()
+    distribution, trajectories, domain = payments()
     with pytest.raises(ValueError, match="Real functions"):
-        measure((FunctionImplementation(demo_definition(), reconcile),), distribution, episodes,
+        measure((FunctionImplementation(demo_definition(), reconcile),), distribution, trajectories,
                 domain=domain, config=MeasurementConfig(mode="simulation"))
 
 
-def test_real_observed_model_version_mismatch(clean_episode):
+def test_real_observed_model_version_mismatch(clean_trajectory):
     def execute(ctx):
         ctx.tools.record_usage(tokens=10, cost=.1, metadata={"provider_version": "different"})
         ctx.tools.escalate()
-    result = _execute(FunctionImplementation(demo_definition(), execute), clean_episode, 0, 0)
+    result = _execute(FunctionImplementation(demo_definition(), execute), clean_trajectory, 0, 0)
     assert "provider version" in result.error
 
 
-def test_unreported_real_usage_is_not_zero(clean_episode):
-    result = _execute(FunctionImplementation(demo_definition(), lambda ctx: ctx.tools.escalate()), clean_episode, 0, 0)
+def test_unreported_real_usage_is_not_zero(clean_trajectory):
+    result = _execute(FunctionImplementation(demo_definition(), lambda ctx: ctx.tools.escalate()), clean_trajectory, 0, 0)
     assert result.error
     assert result.grades.process.tokens is None
     assert result.grades.process.cost is None
@@ -70,20 +70,20 @@ def test_comparison_family_cannot_be_split(measurement):
         MeasurementConfig(prepost_plan=plan, confirmatory_comparisons=(comparison,))
 
 
-def test_exception_retains_completed_actions(clean_episode):
+def test_exception_retains_completed_actions(clean_trajectory):
     def execute(ctx):
         ctx.tools.escalate()
         raise RuntimeError("after action")
-    result = _execute(FunctionImplementation(demo_definition(), execute, "simulation"), clean_episode, 0, 0)
+    result = _execute(FunctionImplementation(demo_definition(), execute, "simulation"), clean_trajectory, 0, 0)
     assert result.outcome.escalated and result.error
 
 
 def test_controls_and_paired_seeds(measurement):
     assert {f.name for f in measurement.functions} >= {"always_pay", "always_escalate"}
     assert len(measurement.control_ids) == 2
-    for episode in measurement.episodes:
+    for trajectory in measurement.trajectories:
         for repetition in range(2):
-            assert len({t.seed for t in measurement.trials if t.episode_id == episode.id and t.repetition == repetition}) == 1
+            assert len({t.seed for t in measurement.trials if t.trajectory_id == trajectory.id and t.repetition == repetition}) == 1
 
 
 def test_default_domain_grades_return_values():
@@ -97,14 +97,14 @@ def test_default_domain_grades_return_values():
 
 
 def test_validity_binds_to_measurement():
-    distribution, episodes = arithmetic_book(6)
+    distribution, trajectories = arithmetic_book(6)
     function = Function(name="add", implementation={"revision": "1"})
     now = datetime.now(UTC)
     with pytest.raises(ValueError, match="validity period"):
-        measure((FunctionImplementation(function, add, "simulation"),), distribution, episodes,
+        measure((FunctionImplementation(function, add, "simulation"),), distribution, trajectories,
                 config=MeasurementConfig(mode="simulation"),
                 validity=ValidityPeriod(start=now + timedelta(days=1), end=now + timedelta(days=2)))
-    m = measure((FunctionImplementation(function, add, "simulation"),), distribution, episodes,
+    m = measure((FunctionImplementation(function, add, "simulation"),), distribution, trajectories,
                 config=MeasurementConfig(mode="simulation", bootstrap_samples=200, loss_simulations=200),
                 validity=ValidityPeriod(start=now - timedelta(days=1), end=now + timedelta(days=2)))
     assert m.validity is not None and "during" in " ".join(limitations(m, function.id))

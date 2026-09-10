@@ -1,4 +1,4 @@
-"""Anytime-valid bounded-mean monitoring of randomly selected audit episodes."""
+"""Anytime-valid bounded-mean monitoring of randomly selected audit trajectories."""
 
 from __future__ import annotations
 
@@ -22,12 +22,12 @@ def detect_drift(audit_rows: Sequence[Mapping[str, Any]], *, baselines: Mapping[
     if not 0 < alpha < 1 or not 0 < expected_shift <= 1 or not baselines:
         raise ValueError("Specify baselines, alpha in (0,1), and normalized expected_shift in (0,1]")
     if any(not r.get("audit_selected") or not r.get("judged_safe") or not r.get("human_reviewed") for r in audit_rows):
-        raise ValueError("Drift must use only randomly audited episodes that operation judged safe")
+        raise ValueError("Drift must use only randomly audited trajectories that operation judged safe")
     probabilities = {float(r.get("audit_probability", 0)) for r in audit_rows}
     if probabilities and (len(probabilities) != 1 or not 0 < next(iter(probabilities)) <= 1):
         raise ValueError("Audit rows require one common, positive random inclusion probability")
-    if len({r["episode_id"] for r in audit_rows}) != len(audit_rows):
-        raise ValueError("Operational audit episodes may appear only once")
+    if len({r["trajectory_id"] for r in audit_rows}) != len(audit_rows):
+        raise ValueError("Operational audit trajectories may appear only once")
     clustered: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
     closed = set()
     previous = None
@@ -64,15 +64,15 @@ def detect_drift(audit_rows: Sequence[Mapping[str, Any]], *, baselines: Mapping[
             maximum = max(maximum, log_e)
             if alarm is None and log_e >= log(threshold):
                 alarm = index
-            trace.append({"cluster": cluster, "episodes": len(observations), "observed_mean": mean * upper,
+            trace.append({"cluster": cluster, "trajectories": len(observations), "observed_mean": mean * upper,
                           "log_e_value": log_e})
         results[metric] = {"baseline": baseline, "alarm": alarm is not None, "first_alarm_cluster": alarm,
                            "e_value": exp(min(log_e, 700)), "maximum_e_value": exp(min(maximum, 700)),
                            "trace": trace}
-    return {"audit_episodes": len(audit_rows), "audit_clusters": len(clustered), "metrics": results,
+    return {"audit_trajectories": len(audit_rows), "audit_clusters": len(clustered), "metrics": results,
             "familywise_alpha": alpha, "alarm_threshold": threshold,
             "method": "one-sided bounded Hoeffding e-process with Bonferroni anytime threshold",
-            "assumptions": ["Audit inclusion is random and independent of outcomes among operationally safe episodes.",
+            "assumptions": ["Audit inclusion is random and independent of outcomes among operationally safe trajectories.",
                             "Each cluster is completed before it is added; future observations cannot be appended to an already monitored cluster.",
                             "Under the null each next cluster's conditional mean is at most its predeclared baseline.",
                             "The monitored population is the operationally safe book; escalated non-audit work is excluded.",

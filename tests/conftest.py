@@ -9,7 +9,7 @@ from signal_sdk.runner import FunctionImplementation, measure
 
 
 @pytest.fixture
-def clean_episode():
+def clean_trajectory():
     return generate_book(1, seed=3, hazard_rates={}, impossible_rate=0)[1][0]
 
 
@@ -27,7 +27,7 @@ def validity():
 
 @pytest.fixture(scope="session")
 def measurement():
-    distribution, episodes = generate_book(16, seed=8, vendors=8, variants=True)
-    return measure((FunctionImplementation(demo_definition(), reconcile, "simulation"),), distribution, episodes,
-                   domain=payments_domain(demo_mandate(episodes)),
+    distribution, trajectories = generate_book(16, seed=8, vendors=8, variants=True)
+    return measure((FunctionImplementation(demo_definition(), reconcile, "simulation"),), distribution, trajectories,
+                   domain=payments_domain(demo_mandate(trajectories)),
                    config=MeasurementConfig(repetitions=2, bootstrap_samples=200, loss_simulations=200))

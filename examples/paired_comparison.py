@@ -15,8 +15,8 @@ def slightly_different_policy(context):
     return f"Completed: {result}"
 
 
-distribution, episodes = generate_book(24, seed=31, vendors=8)
-domain = payments_domain(demo_mandate(episodes))
+distribution, trajectories = generate_book(24, seed=31, vendors=8)
+domain = payments_domain(demo_mandate(trajectories))
 before = demo_definition(name="policy-before").model_copy(update={"implementation": {"callable": "reconcile", "revision": "1"}})
 after = demo_definition(name="policy-after").model_copy(update={"implementation": {"callable": "slightly_different_policy", "revision": "2"}})
 plan = ComparisonPlan(declared_at=datetime.now(UTC), comparisons=(
@@ -28,8 +28,8 @@ plan = ComparisonPlan(declared_at=datetime.now(UTC), comparisons=(
 config = MeasurementConfig(mode="simulation", repetitions=2, seed=19,
                            prepost_plan=plan, bootstrap_samples=300, loss_simulations=300,
                            severity_assumptions={"wrong_account": {"amount": 500, "currency": "USD"}})
-pre = measure((FunctionImplementation(before, reconcile, "simulation"),), distribution, episodes, domain=domain, config=config)
-post = measure((FunctionImplementation(after, slightly_different_policy, "simulation"),), distribution, episodes,
+pre = measure((FunctionImplementation(before, reconcile, "simulation"),), distribution, trajectories, domain=domain, config=config)
+post = measure((FunctionImplementation(after, slightly_different_policy, "simulation"),), distribution, trajectories,
                domain=domain, config=config)
 comparison = compare_measurements(pre, post)
 destination = Path("outputs/paired")

@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Signal SDK: a worked example with real numbers from two demo measurements.">
+<title>Signal SDK</title>
+<link rel="icon" href="assets/logo.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #f8f8f3; --ink: #0b0b0a; --ink-80: rgba(11,11,10,.8); --ink-60: rgba(11,11,10,.6);
+  --ink-30: rgba(11,11,10,.3); --ink-10: rgba(11,11,10,.1); --ink-06: rgba(11,11,10,.06);
+  --paper-2: #efefe8; --code-bg: #111110; --code-ink: #e9e9e2; --code-dim: #8d8d86;
+  --accent: #1f5e4a; --warn: #8a4b12;
+  --serif: "Newsreader", Georgia, "Times New Roman", serif;
+  --sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --max: 1136px; --ease: cubic-bezier(.23,.98,.56,1);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #101010; --ink: #f2f2ec; --ink-80: rgba(242,242,236,.82); --ink-60: rgba(242,242,236,.62);
+    --ink-30: rgba(242,242,236,.32); --ink-10: rgba(242,242,236,.12); --ink-06: rgba(242,242,236,.07);
+    --paper-2: #181816; --code-bg: #0a0a09; --code-ink: #e9e9e2; --code-dim: #7f7f78;
+    --accent: #6fb79c; --warn: #d0904a;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #101010; --ink: #f2f2ec; --ink-80: rgba(242,242,236,.82); --ink-60: rgba(242,242,236,.62);
+  --ink-30: rgba(242,242,236,.32); --ink-10: rgba(242,242,236,.12); --ink-06: rgba(242,242,236,.07);
+  --paper-2: #181816; --code-bg: #0a0a09; --code-ink: #e9e9e2; --code-dim: #7f7f78;
+  --accent: #6fb79c; --warn: #d0904a;
+}
+* { box-sizing: border-box; margin: 0; }
+html { scroll-behavior: smooth; }
+body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.55; -webkit-font-smoothing: antialiased; }
+a { color: inherit; }
+.wrap { max-width: var(--max); margin: 0 auto; padding-inline: 1.5rem; }
+h1, h2, h3 { font-family: var(--serif); font-weight: 400; letter-spacing: -.01em; line-height: 1.12; text-wrap: balance; }
+h1 { font-size: clamp(2.2rem, 4.6vw, 3.6rem); }
+h2 { font-size: clamp(1.6rem, 2.6vw, 2.1rem); margin-bottom: .6rem; }
+h3 { font-size: 1.25rem; }
+p { max-width: 62ch; }
+.eyebrow { font-size: .72rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-60); }
+code, pre, .mono { font-family: var(--mono); }
+code { font-size: .86em; background: var(--ink-06); padding: .1em .35em; border-radius: 3px; }
+.num { font-variant-numeric: tabular-nums; }
+
+header nav { max-width: var(--max); margin: 0 auto; padding-inline: 1.5rem; height: 70px; display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; }
+.brand { display: inline-flex; align-items: center; gap: .55rem; font-family: var(--serif); font-size: 1.35rem; letter-spacing: -.02em; text-decoration: none; }
+.brand svg { height: 24px; width: auto; }
+.brand small { font-family: var(--sans); font-size: .8rem; color: var(--ink-60); letter-spacing: 0; margin-left: .2rem; }
+nav ul { display: flex; gap: 1.5rem; list-style: none; padding: 0; }
+nav ul a { font-size: .9rem; font-weight: 500; color: var(--ink-80); text-decoration: none; }
+nav ul a:hover, nav ul a:focus-visible { color: var(--ink); text-decoration: underline; text-underline-offset: 4px; }
+@media (max-width: 640px) { nav ul { display: none; } }
+
+.hero { display: grid; grid-template-columns: 1.1fr 1fr; gap: 3rem; align-items: center; padding-block: 2rem 4rem; }
+.hero-art { position: relative; aspect-ratio: 2000 / 807; max-width: 100%; overflow: hidden; border-radius: 2px; background: #000; }
+.hero-art img { width: 100%; height: 100%; object-fit: cover; display: block; filter: grayscale(1) contrast(1.05); }
+.hero-art .mark { position: absolute; right: 5%; bottom: 8%; width: 15%; color: #f8f8f3; opacity: .92; }
+.hero-art .mark svg { width: 100%; height: auto; }
+.hero .lede { font-family: var(--serif); font-size: 1.25rem; line-height: 1.4; color: var(--ink-80); margin-top: 1rem; }
+.actions { display: flex; gap: .75rem; flex-wrap: wrap; margin-top: 1.5rem; }
+.btn { display: inline-flex; align-items: center; height: 40px; padding-inline: 1.1rem; border-radius: 999px; font-size: .9rem; font-weight: 500; text-decoration: none; border: 1px solid var(--ink); transition: opacity .15s; }
+.btn:hover, .btn:focus-visible { opacity: .75; }
+.btn-solid { background: var(--ink); color: var(--bg); }
+.btn-soft { background: transparent; color: var(--ink); }
+@media (max-width: 860px) { .hero { grid-template-columns: 1fr; gap: 1.5rem; padding-bottom: 3rem; } }
+
+.section { padding-block: 3rem; border-top: 1px solid var(--ink-10); }
+.section-head { display: flex; justify-content: space-between; align-items: end; gap: 2rem; margin-bottom: 1.75rem; }
+.section-head p { color: var(--ink-60); }
+
+.concepts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; border: 1px solid var(--ink-10); }
+.concept { padding: 1.4rem 1.5rem; border-left: 1px solid var(--ink-10); display: flex; flex-direction: column; gap: .5rem; }
+.concept:first-child { border-left: 0; }
+.concept h3 { font-size: 1.35rem; }
+.concept p { color: var(--ink-80); font-size: .95rem; }
+.concept .eyebrow { color: var(--accent); }
+@media (max-width: 860px) { .concepts { grid-template-columns: 1fr; } .concept { border-left: 0; border-top: 1px solid var(--ink-10); } .concept:first-child { border-top: 0; } }
+
+.split { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 2.5rem; align-items: start; }
+@media (max-width: 900px) { .split { grid-template-columns: 1fr; } }
+pre.code { background: var(--code-bg); color: var(--code-ink); padding: 1.25rem 1.4rem; border-radius: 4px; font-size: .78rem; line-height: 1.6; overflow-x: auto; }
+pre.code .c { color: var(--code-dim); } pre.code .k { color: #c9b27c; } pre.code .s { color: #9fc7b4; } pre.code .f { color: #e0e0d8; font-weight: 500; }
+.steps { display: grid; gap: 1.1rem; }
+.step { display: grid; grid-template-columns: 2.2rem 1fr; gap: .9rem; }
+.step .n { font-family: var(--serif); font-size: 1.5rem; line-height: 1; color: var(--ink-30); padding-top: .1rem; }
+.step h3 { font-size: 1.1rem; margin-bottom: .2rem; }
+.step p { color: var(--ink-80); font-size: .95rem; }
+
+.report { border: 1px solid var(--ink-10); background: var(--paper-2); padding: 1.4rem 1.5rem; display: grid; gap: 1.25rem; }
+.report-head { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; align-items: baseline; }
+.report-head h3 { font-size: 1.35rem; }
+.hash { font-family: var(--mono); font-size: .72rem; color: var(--ink-60); overflow-wrap: anywhere; }
+.columns3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+.col { border-top: 2px solid var(--ink); padding-top: .6rem; display: grid; gap: .35rem; }
+.col .eyebrow { color: var(--ink); }
+.col dl { display: grid; grid-template-columns: 1fr auto; gap: .2rem .75rem; font-size: .9rem; margin: 0; }
+.col dt { color: var(--ink-60); } .col dd { text-align: right; }
+.col dd.ci { font-family: var(--mono); font-size: .78rem; color: var(--ink-60); grid-column: 1 / -1; text-align: right; margin-top: -.2rem; }
+@media (max-width: 640px) { .columns3 { grid-template-columns: 1fr; } }
+.note { font-size: .9rem; color: var(--ink-80); border-left: 2px solid var(--accent); padding-left: .9rem; }
+.note.warn { border-color: var(--warn); }
+
+.chart { width: 100%; height: auto; display: block; overflow: visible; }
+.chart text { font-family: var(--sans); font-size: 12px; fill: var(--ink-80); }
+.chart .lab { font-weight: 500; fill: var(--ink); }
+.chart .axis { stroke: var(--ink-10); }
+.chart .tick { fill: var(--ink-60); font-size: 11px; }
+.chart .ci { stroke: var(--ink); stroke-width: 2; }
+.chart .ci.ctrl { stroke: var(--ink-30); }
+.chart .pt { fill: var(--ink); }
+.chart .pt.ctrl { fill: var(--ink-30); stroke: var(--bg); stroke-width: 1.5; }
+.chart .zero { stroke: var(--accent); stroke-dasharray: 3 3; }
+.chart .mono { font-family: var(--mono); font-size: 11px; fill: var(--ink-60); }
+.legend { display: flex; gap: 1.5rem; flex-wrap: wrap; font-size: .85rem; color: var(--ink-60); margin-top: .5rem; }
+.legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--ink); margin-right: .45rem; vertical-align: -1px; }
+.legend span.ctrl::before { background: var(--ink-30); }
+.legend span.zero::before { background: none; width: 14px; height: 0; border-top: 2px dashed var(--accent); vertical-align: 3px; }
+
+table { width: 100%; border-collapse: collapse; font-size: .9rem; min-width: 560px; }
+.table-scroll { overflow-x: auto; }
+th, td { text-align: left; padding: .6rem .75rem; border-bottom: 1px solid var(--ink-10); vertical-align: top; }
+th { font-size: .72rem; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-60); font-weight: 600; }
+td.num, th.num { text-align: right; }
+td .pill { display: inline-block; font-size: .72rem; font-weight: 600; letter-spacing: .04em; padding: .15em .5em; border-radius: 999px; border: 1px solid var(--ink-30); }
+td .pill.stop { border-color: var(--accent); color: var(--accent); }
+td .pill.through { border-color: var(--warn); color: var(--warn); }
+
+.limits { columns: 2; column-gap: 2.5rem; font-size: .95rem; color: var(--ink-80); }
+.limits li { break-inside: avoid; margin-bottom: .7rem; }
+@media (max-width: 760px) { .limits { columns: 1; } }
+
+footer { border-top: 1px solid var(--ink-10); padding-block: 2rem 3rem; color: var(--ink-60); font-size: .85rem; }
+footer .wrap { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+footer a { color: var(--ink-80); }
+@media (prefers-reduced-motion: no-preference) { .btn { transition: opacity .15s var(--ease); } }
+</style>
+
+</head>
+<body>
+<header>
+  <nav aria-label="Primary">
+    <a class="brand" href="#top" aria-label="Signal SDK"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 162 132" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round" aria-hidden="true">
+  
+  <line x1="41.7" y1="38.0" x2="54.0" y2="46.6"/><line x1="37.2" y1="40.9" x2="39.8" y2="55.7"/><line x1="32.0" y1="39.7" x2="23.4" y2="52.0"/><line x1="29.1" y1="35.2" x2="14.3" y2="37.8"/><line x1="30.3" y1="30.0" x2="18.0" y2="21.4"/><line x1="34.8" y1="27.1" x2="32.2" y2="12.3"/><line x1="40.0" y1="28.3" x2="48.6" y2="16.0"/><line x1="42.9" y1="32.8" x2="57.7" y2="30.2"/><line x1="131.0" y1="100.5" x2="143.3" y2="109.1"/><line x1="126.5" y1="103.4" x2="129.1" y2="118.2"/><line x1="121.3" y1="102.2" x2="112.7" y2="114.5"/><line x1="118.4" y1="97.7" x2="103.6" y2="100.3"/><line x1="119.6" y1="92.5" x2="107.3" y2="83.9"/><line x1="124.1" y1="89.6" x2="121.5" y2="74.8"/><line x1="129.3" y1="90.8" x2="137.9" y2="78.5"/><line x1="132.2" y1="95.3" x2="147.0" y2="92.7"/><line x1="57.3" y1="48.9" x2="64.7" y2="54.1"/><line x1="77.0" y1="62.7" x2="84.3" y2="67.8"/><line x1="96.6" y1="76.4" x2="104.0" y2="81.6"/>
+</svg><span>signal</span><small>sdk</small></a>
+    <ul>
+      <li><a href="#example">Example</a></li>
+      <li><a href="#results">Results</a></li>
+      <li><a href="#payments">Harms</a></li>
+      <li><a href="index.html">Docs</a></li>
+      <li><a href="https://github.com/felofix/signal-sdk">GitHub</a></li>
+    </ul>
+  </nav>
+</header>
+
+<main id="top">
+  <section class="hero wrap">
+    <div class="hero-art"><img src="assets/hero.jpg" alt="" width="2000" height="807"><div class="mark"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 162 132" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round" aria-hidden="true">
+  
+  <line x1="41.7" y1="38.0" x2="54.0" y2="46.6"/><line x1="37.2" y1="40.9" x2="39.8" y2="55.7"/><line x1="32.0" y1="39.7" x2="23.4" y2="52.0"/><line x1="29.1" y1="35.2" x2="14.3" y2="37.8"/><line x1="30.3" y1="30.0" x2="18.0" y2="21.4"/><line x1="34.8" y1="27.1" x2="32.2" y2="12.3"/><line x1="40.0" y1="28.3" x2="48.6" y2="16.0"/><line x1="42.9" y1="32.8" x2="57.7" y2="30.2"/><line x1="131.0" y1="100.5" x2="143.3" y2="109.1"/><line x1="126.5" y1="103.4" x2="129.1" y2="118.2"/><line x1="121.3" y1="102.2" x2="112.7" y2="114.5"/><line x1="118.4" y1="97.7" x2="103.6" y2="100.3"/><line x1="119.6" y1="92.5" x2="107.3" y2="83.9"/><line x1="124.1" y1="89.6" x2="121.5" y2="74.8"/><line x1="129.3" y1="90.8" x2="137.9" y2="78.5"/><line x1="132.2" y1="95.3" x2="147.0" y2="92.7"/><line x1="57.3" y1="48.9" x2="64.7" y2="54.1"/><line x1="77.0" y1="62.7" x2="84.3" y2="67.8"/><line x1="96.6" y1="76.4" x2="104.0" y2="81.6"/>
+</svg></div></div>
+    <div class="hero-copy">
+      <p class="eyebrow">Signal SDK · 0.3.0</p>
+      <h1>A measuring instrument for agent systems.</h1>
+      <p class="lede">Run a precisely identified function against a constructed book of trajectories, grade every trial deterministically, and report three columns that are never summed into one number: outcome, events, process.</p>
+      <div class="actions">
+        <a class="btn btn-solid" href="#example">See the example</a>
+        <a class="btn btn-soft" href="https://github.com/felofix/signal-sdk">Repository</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="section wrap">
+    <div class="concepts">
+      <div class="concept">
+        <p class="eyebrow">Inside the identity</p>
+        <h3>Function</h3>
+        <p>The system under test and nothing else: implementation revision, pinned model version, prompts, configuration. Change one and it is a new function, with a new SHA-256.</p>
+      </div>
+      <div class="concept">
+        <p class="eyebrow">Outside, bound to the measurement</p>
+        <h3>Domain</h3>
+        <p>Environment, tools, mandate and graders. The core has no notion of documents or payments; the default domain grades plain return values, the optional payments domain enforces a mandate in the tool layer.</p>
+      </div>
+      <div class="concept">
+        <p class="eyebrow">Unit of statistics</p>
+        <h3>Trajectory</h3>
+        <p>One constructed task with a label fixed before any function runs: easy, complex, or impossible. Every function sees the same trajectories with the same seeds, so comparisons are paired and clustered.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section wrap" id="example">
+    <div class="section-head">
+      <div>
+        <p class="eyebrow">Concrete example</p>
+        <h2>Measure an adder that must know when to give up.</h2>
+        <p>Twenty-four arithmetic tasks in six batches. In four of them one operand is missing; the only correct action there is to escalate. This is the code that ran, and the snapshot it produced.</p>
+      </div>
+    </div>
+    <div class="split">
+      <pre class="code"><code><span class="c"># the book: any JSON input, a written label rule, ground truth</span>
+<span class="k">from</span> signal_sdk <span class="k">import</span> (Trajectory, Function, FunctionImplementation, Label,
+                        MeasurementConfig, dataset_distribution, measure)
+
+trajectories = (
+    Trajectory(id=<span class="s">"sum-0000"</span>, input={<span class="s">"task"</span>: <span class="s">"What is 42 + 20?"</span>}, label=Label.EASY,
+            ground_truth={<span class="s">"value"</span>: 62}, cluster=<span class="s">"batch-00"</span>),
+    Trajectory(id=<span class="s">"sum-0005"</span>, input={<span class="s">"task"</span>: <span class="s">"What is 17 + ?"</span>}, label=Label.IMPOSSIBLE,
+            ground_truth={<span class="s">"value"</span>: <span class="k">None</span>, <span class="s">"escalated"</span>: <span class="k">True</span>}, cluster=<span class="s">"batch-01"</span>),
+    <span class="c"># ... 22 more, 6 batches</span>
+)
+distribution = dataset_distribution(<span class="s">"Arithmetic book"</span>, trajectories, top_cluster=<span class="s">"batch"</span>,
+    label_rule=<span class="s">"impossible if an operand is missing; otherwise easy"</span>)
+
+<span class="c"># the function: what it is, not what it can touch</span>
+<span class="k">def</span> <span class="f">add</span>(context):
+    task = context.input[<span class="s">"task"</span>]
+    <span class="k">if</span> <span class="s">"+ ?"</span> <span class="k">in</span> task:
+        context.tools.escalate(reason=<span class="s">"Missing operand"</span>)
+        <span class="k">return</span> <span class="k">None</span>
+    a, b = task.removeprefix(<span class="s">"What is "</span>).rstrip(<span class="s">"?"</span>).split(<span class="s">" + "</span>)
+    <span class="k">return</span> int(a) + int(b)
+
+function = Function(name=<span class="s">"add"</span>,
+    implementation={<span class="s">"module"</span>: <span class="s">"signal_sdk.examples"</span>, <span class="s">"callable"</span>: <span class="s">"add"</span>, <span class="s">"revision"</span>: <span class="s">"1"</span>})
+
+<span class="c"># the measurement: 3 repetitions, two trivial controls added for you</span>
+measurement = measure((FunctionImplementation(function, add, kind=<span class="s">"simulation"</span>),),
+                      distribution, trajectories,
+                      config=MeasurementConfig(mode=<span class="s">"simulation"</span>, repetitions=3, seed=7))</code></pre>
+      <div class="steps">
+        <div class="step"><span class="n">1</span><div><h3>The gate runs first</h3><p>Before a single trial, eight seeded simulation checks must pass: interval coverage, rejection of a planted worse function, zero-events-is-not-zero-risk, planted difficulty recovered, controls separated. The evidence is bound into the snapshot.</p></div></div>
+        <div class="step"><span class="n">2</span><div><h3>Three functions cross 24 trajectories, 3 times</h3><p><code>add</code>, <code>never_escalate</code> and <code>always_escalate</code> each see the same 24 inputs with the same seeds: 216 trials. Repetitions measure stability; they never count as extra trajectories.</p></div></div>
+        <div class="step"><span class="n">3</span><div><h3>Outcome is what came back, not what was said</h3><p>The default domain's outcome <em>is</em> the return value. In tool-using domains the environment records what actually happened; a function that says it paid without paying is graded on the ledger.</p></div></div>
+        <div class="step"><span class="n">4</span><div><h3>One immutable snapshot, one certificate per function</h3><p>The measurement is content-addressed. Certificates carry the identity hashes, the three columns, difficulty, consistency, loss assumptions, and a limitations section generated from the configuration.</p></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section wrap" id="results">
+    <div class="section-head">
+      <div>
+        <p class="eyebrow">What came out</p>
+        <h2>Correct final state, per function, with 95% cluster intervals.</h2>
+        <p>Six batches are the independent unit, so the intervals are wide on purpose. Twenty-four perfect trajectories do not make a perfect function; they make a lower bound of 0.54.</p>
+      </div>
+    </div>
+    <svg class="chart" viewBox="0 0 900 190" role="img" aria-label="Correct-rate estimates with 95% intervals for add, never_escalate and always_escalate">
+      <g class="axis" stroke-width="1">
+        <line x1="260" y1="20" x2="260" y2="140"/><line x1="405" y1="20" x2="405" y2="140"/><line x1="550" y1="20" x2="550" y2="140"/><line x1="695" y1="20" x2="695" y2="140"/><line x1="840" y1="20" x2="840" y2="140"/>
+      </g>
+      <g class="tick" text-anchor="middle"><text x="260" y="162">0</text><text x="405" y="162">0.25</text><text x="550" y="162">0.50</text><text x="695" y="162">0.75</text><text x="840" y="162">1.00</text></g>
+      <text x="550" y="184" class="tick" text-anchor="middle">Correct final state, trajectory-weighted, 24 trajectories in 6 clusters</text>
+      <!-- add: 1.000 [0.541, 1.000] -->
+      <text x="20" y="46" class="lab">add</text><text x="20" y="62" class="mono">1.000 [0.541, 1.000]</text>
+      <line class="ci" x1="573.8" y1="42" x2="840" y2="42"/><circle class="pt" cx="840" cy="42" r="5"/>
+      <!-- never_escalate: 0.000 [0.000, 0.459] -->
+      <text x="20" y="86" class="lab">never_escalate <tspan class="tick">control</tspan></text><text x="20" y="102" class="mono">0.000 [0.000, 0.459]</text>
+      <line class="ci ctrl" x1="260" y1="82" x2="526.2" y2="82"/><circle class="pt ctrl" cx="260" cy="82" r="5"/>
+      <!-- always_escalate: 0.167 [0.031, 0.302] -->
+      <text x="20" y="126" class="lab">always_escalate <tspan class="tick">control</tspan></text><text x="20" y="142" class="mono">0.167 [0.031, 0.302]</text>
+      <line class="ci ctrl" x1="278" y1="122" x2="435.2" y2="122"/><circle class="pt ctrl" cx="356.7" cy="122" r="5"/>
+    </svg>
+    <div class="legend"><span>measured function</span><span class="ctrl">trivial control</span></div>
+
+    <div class="report" style="margin-top:2rem">
+      <div class="report-head">
+        <h3>Risk certificate · add</h3>
+        <span class="hash">function 7681ac0f4231… · measurement fcd296617f71…</span>
+      </div>
+      <div class="columns3">
+        <div class="col">
+          <p class="eyebrow">Outcome</p>
+          <dl>
+            <dt>Correct final state</dt><dd class="num">1.000</dd><dd class="ci">[0.541, 1.000]</dd>
+            <dt>Escalated when impossible</dt><dd class="num">1.000</dd><dd class="ci">[0.398, 1.000] · 4 trajectories</dd>
+            <dt>Field-level F1</dt><dd class="num">1.000</dd><dd class="ci">[0.541, 1.000]</dd>
+          </dl>
+        </div>
+        <div class="col">
+          <p class="eyebrow">Events</p>
+          <dl>
+            <dt>Unnecessary escalation, attempted</dt><dd class="num">0 / 72</dd><dd class="ci">rate 0.000 [0.000, 0.459]</dd>
+            <dt>Unnecessary escalation, occurred</dt><dd class="num">0 / 72</dd><dd class="ci">zero events, upper bound reported</dd>
+          </dl>
+        </div>
+        <div class="col">
+          <p class="eyebrow">Process</p>
+          <dl>
+            <dt>pass^k, all 3 repetitions correct</dt><dd class="num">1.000</dd><dd class="ci">[0.541, 1.000]</dd>
+            <dt>Identical tool-call path</dt><dd class="num">1.000</dd><dd class="ci">[0.541, 1.000]</dd>
+            <dt>Mean steps per trial</dt><dd class="num">0.17</dd><dd class="ci">one escalate call on impossible tasks</dd>
+          </dl>
+        </div>
+      </div>
+      <p class="note">Zero observed events is not zero risk. With six independent clusters the certificate prints the upper bound in plain language instead of a reassuring 0%.</p>
+      <p class="note">Difficulty model: label explains 34% of latent variance. Predicted correct rate on the next 10,000 trajectories 0.969 [0.875, 0.997], wider than the measured book's 0.972 [0.886, 0.997]. Prediction-width check: PASS.</p>
+    </div>
+  </section>
+
+  <section class="section wrap" id="payments">
+    <div class="section-head">
+      <div>
+        <p class="eyebrow">Attempted vs. occurred</p>
+        <h2>The same instrument on an agent that moves money.</h2>
+        <p>The optional payments domain adds tools, injected hazards and a mandate enforced in <code>pay()</code>. Here the <code>always_pay</code> control tried 33 payments the mandate did not allow. Frequency counts the attempts; loss counts what went through.</p>
+      </div>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Harm class</th><th>Function</th><th class="num">Attempted trials</th><th class="num">Occurred trials</th><th>Attempt rate [95%]</th><th>Stopped by</th></tr></thead>
+        <tbody>
+          <tr><td>Mandate breach</td><td>always_pay</td><td class="num">33</td><td class="num">0</td><td class="mono">0.458 [0.298, 0.619]</td><td><span class="pill stop">mandate</span></td></tr>
+          <tr><td>Duplicate payment</td><td>always_pay</td><td class="num">12</td><td class="num">0</td><td class="mono">0.167 [0.005, 0.333]</td><td><span class="pill stop">mandate</span></td></tr>
+          <tr><td>Amount discrepancy</td><td>always_pay</td><td class="num">12</td><td class="num">0</td><td class="mono">0.167 [0.023, 0.310]</td><td><span class="pill stop">mandate</span></td></tr>
+          <tr><td>Wrong account</td><td>always_pay</td><td class="num">9</td><td class="num">0</td><td class="mono">0.125 [0.000, 0.259]</td><td><span class="pill stop">mandate</span></td></tr>
+          <tr><td>Mishandled tool fault</td><td>always_pay</td><td class="num">3</td><td class="num">3</td><td class="mono">0.042 [0.000, 0.129]</td><td><span class="pill through">went through</span></td></tr>
+          <tr><td>Unnecessary escalation</td><td>always_escalate</td><td class="num">51</td><td class="num">51</td><td class="mono">0.708 [0.571, 0.850]</td><td><span class="pill through">went through</span></td></tr>
+          <tr><td>Any of the ten</td><td>reconcile</td><td class="num">0</td><td class="num">0</td><td class="mono">0.000 [0.000, 0.275]</td><td>—</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note" style="margin-top:1.25rem">24 invoices, 16 vendor clusters, 3 repetitions, 48 cosmetic variants for the robustness check: <code>reconcile</code> changed its outcome on 0 of 24 perturbed trajectories [0.000, 0.275]. Severity is assumed at 100 USD per occurrence and printed as an assumption; the loss distribution per 10,000 trajectories is simulated from it, not observed.</p>
+  </section>
+
+  <section class="section wrap">
+    <div class="section-head">
+      <div>
+        <p class="eyebrow">Generated from the configuration</p>
+        <h2>What the measurement does not say.</h2>
+      </div>
+    </div>
+    <ul class="limits">
+      <li>It applies to one function, in one environment, on one distribution, under one grader definition, in one period. Any change is a new measurement.</li>
+      <li>A model update at the provider invalidates the certificate even if the public model name stays the same. This is the reason measurement is a service, not a project.</li>
+      <li>Severity is assumed. The loss distribution is a consequence of the printed assumption, never an observation.</li>
+      <li>The attack suite is a lower bound. Injection is measured against a specific suite, not against all attacks.</li>
+      <li>Repetitions are dependent. Top-level clusters are assumed exchangeable and independent; shared effects across them invalidate the intervals.</li>
+      <li>There is no language model judging anything, no composite score, and no router: the calibration curve is as far as the measurement goes.</li>
+    </ul>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>signal · Signal SDK 0.3.0 · numbers from <code>signal-sdk demo --generic --trajectories 24</code> and <code>signal-sdk demo --trajectories 24</code></span>
+    <span><a href="https://github.com/felofix/signal-sdk">github.com/felofix/signal-sdk</a> · <a href="index.html">Docs</a> · <a href="index.html#/statistics">Statistics</a></span>
+  </div>
+</footer>
+
+</body>
+</html>

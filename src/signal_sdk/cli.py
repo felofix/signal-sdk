@@ -11,7 +11,7 @@ def main(argv: list[str] | None = None) -> int:
     validate = sub.add_parser("validate", help="Run simulation PASS/FAIL checks")
     validate.add_argument("--seed", type=int, default=1729)
     demo = sub.add_parser("demo", help="Run a constructed simulation plus domain controls")
-    demo.add_argument("--episodes", type=int, default=48)
+    demo.add_argument("--trajectories", type=int, default=48)
     demo.add_argument("--seed", type=int, default=7)
     demo.add_argument("--repetitions", type=int, default=3)
     demo.add_argument("--output", type=Path, default=Path("outputs/demo"))
@@ -25,7 +25,7 @@ def main(argv: list[str] | None = None) -> int:
     compare.add_argument("pre", type=Path)
     compare.add_argument("post", type=Path)
     compare.add_argument("--output", type=Path, default=Path("outputs/comparison.json"))
-    power = sub.add_parser("power", help="Plan episodes for a currency margin before execution")
+    power = sub.add_parser("power", help="Plan trajectories for a currency margin before execution")
     power.add_argument("--margin", type=float, required=True)
     power.add_argument("--paired-sd", type=float, required=True)
     power.add_argument("--cluster-size", type=float, default=1.)
@@ -65,8 +65,8 @@ def main(argv: list[str] | None = None) -> int:
         from .visualization import export_html
         if args.command == "demo":
             from .examples import arithmetic_demo, demo
-            measurement = (arithmetic_demo(args.episodes, args.seed, args.repetitions) if args.generic
-                           else demo(args.episodes, args.seed, args.repetitions, not args.no_variants))
+            measurement = (arithmetic_demo(args.trajectories, args.seed, args.repetitions) if args.generic
+                           else demo(args.trajectories, args.seed, args.repetitions, not args.no_variants))
         else:
             measurement = Measurement.model_validate_json(args.measurement.read_text())
         args.output.mkdir(parents=True, exist_ok=True)

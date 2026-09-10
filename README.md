@@ -13,7 +13,7 @@ Deterministic graders · paired, clustered statistics · risk certificates</p>
 <p align="center"><img src="docs/assets/hero.jpg" alt="" width="100%"></p>
 
 Signal runs a precisely identified **function** (the system under test) against a
-constructed **book** of episodes inside an external **environment**, grades every
+constructed **book** of trajectories inside an external **environment**, grades every
 trial with deterministic graders, and reports three separate columns: **outcome**,
 **events**, **process**. They are never summed into one number.
 
@@ -22,7 +22,9 @@ harm definitions are supplied by a `Domain`; the built-in default grades plain
 return values, and an optional invoice-payment domain shows a tool-using,
 adversarial setup with a tool-enforced mandate.
 
-**[Worked example with real numbers →](https://felofix.github.io/signal-sdk/)**
+**[Documentation](https://felofix.github.io/signal-sdk/)** · **[Worked example with real numbers](https://felofix.github.io/signal-sdk/example.html)** · [llms.txt](docs/llms.txt)
+
+Measuring is not only a gate. `run_experiment()` compares variants on one book with the rulers you choose, and `rate_trials()` attaches human or model judges whose reliability becomes a ruler too.
 
 ## Run It
 
@@ -44,18 +46,18 @@ latency; read the Markdown and JSON certificates in `certificates/`.
 Measuring your own callable takes a book, a `Function` identity and a call:
 
 ```python
-from signal_sdk import Episode, Function, FunctionImplementation, Label, MeasurementConfig, dataset_distribution, measure
+from signal_sdk import Trajectory, Function, FunctionImplementation, Label, MeasurementConfig, dataset_distribution, measure
 
-episodes = tuple(Episode(id=f"e{i}", input={"task": f"Uppercase: {w}"}, label=Label.EASY,
+trajectories = tuple(Trajectory(id=f"e{i}", input={"task": f"Uppercase: {w}"}, label=Label.EASY,
                          ground_truth={"value": w.upper()}, cluster=f"g{i // 3}")
-                 for i, w in enumerate(["signal", "measure", "episode", "trial", "grader", "loss"]))
-distribution = dataset_distribution("Uppercase words", episodes, label_rule="all easy", top_cluster="group")
+                 for i, w in enumerate(["signal", "measure", "trajectory", "trial", "grader", "loss"]))
+distribution = dataset_distribution("Uppercase words", trajectories, label_rule="all easy", top_cluster="group")
 
 def upper(context):
     return context.input["task"].removeprefix("Uppercase: ").upper()
 
 function = Function(name="upper", implementation={"module": "my_agent", "revision": "abc123"})
-measurement = measure((FunctionImplementation(function, upper, kind="simulation"),), distribution, episodes,
+measurement = measure((FunctionImplementation(function, upper, kind="simulation"),), distribution, trajectories,
                       config=MeasurementConfig(mode="simulation", repetitions=2))
 ```
 
@@ -64,11 +66,7 @@ See [examples/return_values.py](examples/return_values.py) and
 
 ## Read the Guide
 
-1. [SDK walkthrough](docs/README.md): concepts, domains, construction, execution, reports.
-2. [Statistics](docs/statistics.md): estimands, intervals, pairing, difficulty, loss, calibration, drift.
-3. [API reference](docs/api.md): public types, `Domain`, tool schemas, CLI and dashboard endpoints.
-4. [Specification map](docs/specification.md): what is implemented and its limits.
-5. [Release guide](docs/releasing.md): package checks and the separate PyPI publication step.
+The documentation site lives in [`docs/`](docs/) and is built from [`docs/pages/`](docs/pages/) by `python docs/build_site.py`. It covers concepts, building a book, writing a domain, rulers, comparisons and power, certificates, the statistics, and a per-function SDK reference. [`docs/llms.txt`](docs/llms.txt) is the whole thing as one Markdown file for coding agents. The [specification map](docs/specification.md) and [release guide](docs/releasing.md) remain as Markdown.
 
 ## Scope
 

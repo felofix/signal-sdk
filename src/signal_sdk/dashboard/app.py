@@ -61,7 +61,7 @@ def create_app(data_dir: str | Path | None = None) -> Any:
                 "id": measurement.id,
                 "timestamp": measurement.timestamp.isoformat(),
                 "function_ids": [f.id for f in measurement.functions],
-                "episodes": len(measurement.episodes),
+                "trajectories": len(measurement.trajectories),
                 "trials": len(measurement.trials),
                 "recorded_cost": str(sum(c for c in costs if c is not None)),
                 "missing_cost_trials": sum(c is None for c in costs),
@@ -75,9 +75,9 @@ def create_app(data_dir: str | Path | None = None) -> Any:
         return find(measurement_id).model_dump(mode="json")
 
     @app.get("/api/measurements/{measurement_id}/trials")
-    def list_trials(measurement_id: str, episode_id: str | None = None, function_id: str | None = None) -> list[dict[str, Any]]:
+    def list_trials(measurement_id: str, trajectory_id: str | None = None, function_id: str | None = None) -> list[dict[str, Any]]:
         return [t.model_dump(mode="json") for t in find(measurement_id).trials
-                if (episode_id is None or t.episode_id == episode_id)
+                if (trajectory_id is None or t.trajectory_id == trajectory_id)
                 and (function_id is None or t.function_id == function_id)]
 
     @app.get("/api/measurements/{measurement_id}/trials/{trial_index}")

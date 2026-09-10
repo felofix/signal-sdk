@@ -1,4 +1,4 @@
-"""Episode-weighted estimates and paired, top-cluster uncertainty."""
+"""Trajectory-weighted estimates and paired, top-cluster uncertainty."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ def validate_rows(rows: Rows, *, crossed: bool = True) -> None:
     keys: dict[str, set[tuple[str, int, int]]] = defaultdict(set)
     metadata: dict[str, tuple[str, str]] = {}
     for row in rows:
-        identity = (str(row["episode_id"]), int(row["repetition"]), int(row["seed"]))
+        identity = (str(row["trajectory_id"]), int(row["repetition"]), int(row["seed"]))
         function = str(row["function_id"])
         if identity in keys[function]:
             raise ValueError(f"Duplicate trial for {function}: {identity}")
@@ -28,26 +28,24 @@ def validate_rows(rows: Rows, *, crossed: bool = True) -> None:
         keys[function].add(identity)
         meta = (str(row["cluster"]), str(row["label"]))
         if identity[0] in metadata and metadata[identity[0]] != meta:
-            raise ValueError("An episode's cluster and label must be fixed across trials")
+            raise ValueError("An trajectory's cluster and label must be fixed across trials")
         metadata[identity[0]] = meta
-        if meta[1] not in {"easy", "complex", "impossible"}:
-            raise ValueError(f"Unknown episode label: {meta[1]}")
         for value in row.get("severity", {}).values():
             if not isfinite(float(value)) or float(value) < 0:
                 raise ValueError("Severity must be finite and nonnegative")
     if crossed and any(value != next(iter(keys.values())) for value in keys.values()):
-        raise ValueError("Functions must use exactly the same episodes, repetitions and seeds")
-    episode_repetitions: dict[str, set[int]] = defaultdict(set)
-    for episode, repetition, _ in next(iter(keys.values())):
-        episode_repetitions[episode].add(repetition)
-    if crossed and len({tuple(sorted(v)) for v in episode_repetitions.values()}) > 1:
-        raise ValueError("The crossed design requires the same repetitions on every episode")
+        raise ValueError("Functions must use exactly the same trajectories, repetitions and seeds")
+    trajectory_repetitions: dict[str, set[int]] = defaultdict(set)
+    for trajectory, repetition, _ in next(iter(keys.values())):
+        trajectory_repetitions[trajectory].add(repetition)
+    if crossed and len({tuple(sorted(v)) for v in trajectory_repetitions.values()}) > 1:
+        raise ValueError("The crossed design requires the same repetitions on every trajectory")
 
 
-def episode_groups(rows: Rows) -> dict[str, list[Mapping[str, Any]]]:
+def trajectory_groups(rows: Rows) -> dict[str, list[Mapping[str, Any]]]:
     result: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
     for row in rows:
-        result[str(row["episode_id"])].append(row)
+        result[str(row["trajectory_id"])].append(row)
     return dict(result)
 
 
@@ -78,14 +76,14 @@ def _bootstrap(values: np.ndarray, clusters: Sequence[str], samples: int, rng: n
 
 def interval(values: Sequence[float], clusters: Sequence[str], *, alpha: float = 0.05,
              samples: int = 2000, seed: int = 0, bounds: tuple[float, float] | None = None) -> dict[str, Any]:
-    """Resample clusters, retain all episodes, then take the episode-weighted mean.
+    """Resample clusters, retain all trajectories, then take the trajectory-weighted mean.
 
     At boundaries, a cluster-level zero-event bound replaces a degenerate
     bootstrap. Unequal cluster sizes inflate that bound by max/mean size.
     """
     x = np.asarray(values, dtype=float)
     if not len(x) or len(x) != len(clusters) or not np.isfinite(x).all():
-        raise ValueError("Finite values with one cluster per episode are required")
+        raise ValueError("Finite values with one cluster per trajectory are required")
     if not 0 < alpha < 1 or samples < 100:
         raise ValueError("alpha must be in (0,1); use at least 100 bootstrap samples")
     names = sorted(set(clusters))
@@ -119,18 +117,18 @@ def interval(values: Sequence[float], clusters: Sequence[str], *, alpha: float =
             low, high = max(bounds[0], low), min(bounds[1], high)
     if bounds == (0.0, 1.0) and np.all(x == 0):
         one_sided = min(1.0, sizes.max() / sizes.mean() * (1 - alpha ** (1 / count)))
-        note = (f"No events were observed in {len(x)} episodes across {count} independent clusters. "
+        note = (f"No events were observed in {len(x)} trajectories across {count} independent clusters. "
                 f"The conservative one-sided 95% upper rate bound is {one_sided:.6g}. "
-                "The familiar 3/n rule assumes independent episodes; repetitions do not increase n. "
+                "The familiar 3/n rule assumes independent trajectories; repetitions do not increase n. "
                 "Here the bound uses exchangeable independent clusters and adjusts for unequal sizes.")
     return {"estimate": estimate, "interval": [low, high], "confidence": 1 - alpha,
-            "episodes": len(x), "clusters": count, "method": method, "zero_event_note": note}
+            "trajectories": len(x), "clusters": count, "method": method, "zero_event_note": note}
 
 
 def estimate_metric(rows: Rows, metric: str, *, alpha: float = .05, samples: int = 2000, seed: int = 0) -> dict[str, Any]:
     values, clusters = [], []
     missing = 0
-    for trials in episode_groups(rows).values():
+    for trials in trajectory_groups(rows).values():
         observations = [metric_value(row, metric) for row in trials]
         if any(value is None for value in observations):
             missing += 1
@@ -138,12 +136,12 @@ def estimate_metric(rows: Rows, metric: str, *, alpha: float = .05, samples: int
         values.append(float(np.mean(observations)))
         clusters.append(str(trials[0]["cluster"]))
     if not values:
-        return {"estimate": None, "interval": [None, None], "episodes": 0, "missing_episodes": missing,
+        return {"estimate": None, "interval": [None, None], "trajectories": 0, "missing_trajectories": missing,
                 "status": "usage_not_reported"}
-    bounded = metric in {"correct", "field_f1", "schema_valid", "impossible_escalated"} or metric.startswith(("attempts:", "occurrences:"))
+    bounded = metric in {"correct", "field_f1", "schema_valid", "required_escalation_met"} or metric.startswith(("attempts:", "occurrences:"))
     result = interval(values, clusters, alpha=alpha, samples=samples, seed=seed,
                       bounds=(0.0, 1.0) if bounded else None)
-    result["missing_episodes"] = missing
+    result["missing_trajectories"] = missing
     return result
 
 
@@ -153,7 +151,7 @@ def summarize(rows: Rows, *, bootstrap_samples: int = 2000, seed: int = 0) -> di
     harms = sorted({h for row in rows for h in row.get("attempted", {})} | {h for row in rows for h in row.get("occurred", {})})
     for function_id in sorted({str(r["function_id"]) for r in rows}):
         selected = [r for r in rows if str(r["function_id"]) == function_id]
-        groups = episode_groups(selected)
+        groups = trajectory_groups(selected)
         labels = sorted({r["label"] for r in selected})
         events = {}
         for harm in harms:
@@ -162,8 +160,8 @@ def summarize(rows: Rows, *, bootstrap_samples: int = 2000, seed: int = 0) -> di
                 "occurrences": estimate_metric(selected, f"occurrences:{harm}", samples=bootstrap_samples, seed=seed),
                 "attempted_trials": sum(bool(r.get("attempted", {}).get(harm)) for r in selected),
                 "occurred_trials": sum(bool(r.get("occurred", {}).get(harm)) for r in selected),
-                "attempted_episodes": sum(any(r.get("attempted", {}).get(harm) for r in trials) for trials in groups.values()),
-                "occurred_episodes": sum(any(r.get("occurred", {}).get(harm) for r in trials) for trials in groups.values()),
+                "attempted_trajectories": sum(any(r.get("attempted", {}).get(harm) for r in trials) for trials in groups.values()),
+                "occurred_trajectories": sum(any(r.get("occurred", {}).get(harm) for r in trials) for trials in groups.values()),
                 "observed_loss_per_10000": _scale(estimate_metric(selected, f"loss:{harm}", samples=bootstrap_samples, seed=seed), 10000),
                 "conditional_on_label": {label: {
                     "attempts": estimate_metric([r for r in selected if r["label"] == label], f"attempts:{harm}", samples=bootstrap_samples, seed=seed),
@@ -178,7 +176,7 @@ def summarize(rows: Rows, *, bootstrap_samples: int = 2000, seed: int = 0) -> di
                                      samples=bootstrap_samples, seed=seed, bounds=(0., 1.)),
             "path_consistency": interval([float(len({r.get("path_signature") for r in trials}) == 1) for trials in groups.values()], clusters,
                                          samples=bootstrap_samples, seed=seed, bounds=(0., 1.)),
-            "interpretation": "Fraction of episodes where all k repetitions pass; path consistency requires identical ordered tool-call signatures.",
+            "interpretation": "Fraction of trajectories where all k repetitions pass; path consistency requires identical ordered tool-call signatures.",
         }
         process = {metric: estimate_metric(selected, metric, samples=bootstrap_samples, seed=seed)
                    for metric in ("cost", "latency_ms", "tokens", "steps", "retries", "schema_valid")}
@@ -192,13 +190,13 @@ def summarize(rows: Rows, *, bootstrap_samples: int = 2000, seed: int = 0) -> di
         result[function_id] = {
             "outcome": {"correct": estimate_metric(selected, "correct", samples=bootstrap_samples, seed=seed),
                         "field_f1": estimate_metric(selected, "field_f1", samples=bootstrap_samples, seed=seed),
-                        "impossible_escalated": estimate_metric([r for r in selected if r["label"] == "impossible"], "impossible_escalated", samples=bootstrap_samples, seed=seed),
+                        "required_escalation_met": estimate_metric([r for r in selected if r.get("required_escalation_met") is not None], "required_escalation_met", samples=bootstrap_samples, seed=seed),
                         "conditional_on_label": {label: estimate_metric([r for r in selected if r["label"] == label], "correct", samples=bootstrap_samples, seed=seed) for label in labels}},
             "events": events, "process": process, "consistency": consistency,
             "metrics": {name.removeprefix("metric:"): estimate_metric(selected, name, samples=bootstrap_samples, seed=seed)
                         for name in sorted({k for r in selected for k in r if k.startswith("metric:")})},
         }
-    return {"functions": result, "unit": "episode", "resampling_unit": "top_level_cluster"}
+    return {"functions": result, "unit": "trajectory", "resampling_unit": "top_level_cluster"}
 
 
 def _scale(result: Mapping[str, Any], scale: float) -> dict[str, Any]:
@@ -221,8 +219,8 @@ def compare(rows: Rows, reference_id: str, candidate_id: str, *, comparisons: Se
     family = [c for c in declared if c.get("confirmatory", False)]
     family_size = max(len(family), family_size or 0)
     reports = []
-    reference = episode_groups([r for r in selected if r["function_id"] == reference_id])
-    candidate = episode_groups([r for r in selected if r["function_id"] == candidate_id])
+    reference = trajectory_groups([r for r in selected if r["function_id"] == reference_id])
+    candidate = trajectory_groups([r for r in selected if r["function_id"] == candidate_id])
     for config in declared:
         metric = str(config["metric"])
         confirmatory = bool(config.get("confirmatory", False))
@@ -231,9 +229,9 @@ def compare(rows: Rows, reference_id: str, candidate_id: str, *, comparisons: Se
         higher_is_better = metric in {"correct", "field_f1", "schema_valid"} or config.get("direction") == "higher"
         sign = 1 if higher_is_better else -1
         differences, clusters = [], []
-        for episode in sorted(reference):
-            left = sorted(reference[episode], key=lambda r: (r["repetition"], r["seed"]))
-            right = sorted(candidate[episode], key=lambda r: (r["repetition"], r["seed"]))
+        for trajectory in sorted(reference):
+            left = sorted(reference[trajectory], key=lambda r: (r["repetition"], r["seed"]))
+            right = sorted(candidate[trajectory], key=lambda r: (r["repetition"], r["seed"]))
             pairs = [(metric_value(a, metric), metric_value(b, metric)) for a, b in zip(left, right)]
             if any(a is None or b is None for a, b in pairs):
                 raise ValueError(f"Paired metric {metric} has missing observations")
@@ -266,7 +264,7 @@ def compare(rows: Rows, reference_id: str, candidate_id: str, *, comparisons: Se
         if confirmatory:
             conclusion = "non_inferior" if low is not None and low > -float(margin) else "not_established"
         reports.append({"name": config["name"], "metric": metric, "advantage": report,
-                        "margin": margin, "units": config.get("unit") or ("currency_per_10000_episodes" if scale == 10000 else "rate"),
+                        "margin": margin, "units": config.get("unit") or ("currency_per_10000_trajectories" if scale == 10000 else "rate"),
                         "confirmatory": confirmatory, "conclusion": conclusion})
     return {"reference_function_id": reference_id, "candidate_function_id": candidate_id,
             "comparison_kind": "different_functions", "paired": True,
@@ -281,27 +279,27 @@ def sample_size(margin_currency_per_10000: float, paired_sd_currency: float, *, 
     effect = margin_currency_per_10000 / 10000
     design_effect = 1 + (cluster_size - 1) * icc
     z = norm.ppf(1 - .05 / (2 * comparisons)) + norm.ppf(power)
-    episodes = max(2, ceil((z * paired_sd_currency / effect) ** 2 * design_effect))
-    clusters = max(2, ceil(episodes / cluster_size))
-    return {"episodes": ceil(clusters * cluster_size), "clusters": clusters, "power": power,
+    trajectories = max(2, ceil((z * paired_sd_currency / effect) ** 2 * design_effect))
+    clusters = max(2, ceil(trajectories / cluster_size))
+    return {"trajectories": ceil(clusters * cluster_size), "clusters": clusters, "power": power,
             "margin_currency_per_10000": margin_currency_per_10000,
             "assumptions": {"paired_sd_currency": paired_sd_currency, "icc": icc,
                             "mean_cluster_size": cluster_size, "true_advantage": 0,
                             "design_effect": design_effect, "confirmatory_comparisons": comparisons,
-                            "method": "normal approximation for paired episode differences; equal cluster sizes; plan before running"}}
+                            "method": "normal approximation for paired trajectory differences; equal cluster sizes; plan before running"}}
 
 
-def detectable_difference(episodes: int, paired_sd_currency: float, *, power: float = .8, icc: float = 0,
+def detectable_difference(trajectories: int, paired_sd_currency: float, *, power: float = .8, icc: float = 0,
                           cluster_size: float = 1, comparisons: int = 1) -> dict[str, Any]:
     _power_validate(1, paired_sd_currency, power, icc, cluster_size, comparisons)
-    if episodes < 2:
-        raise ValueError("At least two episodes are required")
+    if trajectories < 2:
+        raise ValueError("At least two trajectories are required")
     z = norm.ppf(1 - .05 / (2 * comparisons)) + norm.ppf(power)
-    difference = float(z * paired_sd_currency * sqrt((1 + (cluster_size - 1) * icc) / episodes) * 10000)
-    return {"episodes": episodes, "detectable_currency_per_10000": difference, "power": power,
+    difference = float(z * paired_sd_currency * sqrt((1 + (cluster_size - 1) * icc) / trajectories) * 10000)
+    return {"trajectories": trajectories, "detectable_currency_per_10000": difference, "power": power,
             "assumptions": {"paired_sd_currency": paired_sd_currency, "icc": icc,
                             "mean_cluster_size": cluster_size, "confirmatory_comparisons": comparisons,
-                            "method": "normal approximation for paired episode differences"}}
+                            "method": "normal approximation for paired trajectory differences"}}
 
 
 def _power_validate(margin: float, sd: float, power: float, icc: float, size: float, comparisons: int) -> None:

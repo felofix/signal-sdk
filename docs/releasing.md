@@ -6,12 +6,14 @@ performed. Check name availability and the intended PyPI owner before publishing
 
 ## Verify the Source
 
+Rebuild the docs site after changing `docs/pages/`: `python docs/build_site.py`.
+
 ```sh
 python -m pip install -e '.[dev]'
 ruff check src tests
 pytest -q
 signal-sdk validate
-signal-sdk demo --episodes 48 --output outputs/release-check
+signal-sdk demo --trajectories 48 --output outputs/release-check
 signal-sdk demo --generic --output outputs/release-check-generic
 python examples/return_values.py
 python examples/paired_comparison.py

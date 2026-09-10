@@ -4,7 +4,7 @@ from decimal import Decimal
 
 from .domain import TrialContext
 from .domains.payments import HARM_CLASSES, Mandate, generate_book, payments_domain
-from .models import Episode, Function, Label, MeasurementConfig, ModelIdentity
+from .models import Trajectory, Function, Label, MeasurementConfig, ModelIdentity
 from .runner import FunctionImplementation, dataset_distribution, measure
 
 
@@ -51,21 +51,21 @@ def demo_definition(name: str = "reconcile") -> Function:
                     implementation={"module": "signal_sdk.examples", "callable": "reconcile", "revision": "1"})
 
 
-def demo_mandate(episodes: tuple[Episode, ...]) -> Mandate:
-    vendors = sorted({v for e in episodes for v in e.environment.get("vendor_registry", {})})
-    accounts = sorted({v["account"] for e in episodes for v in e.environment.get("vendor_registry", {}).values() if v.get("account")})
+def demo_mandate(trajectories: tuple[Trajectory, ...]) -> Mandate:
+    vendors = sorted({v for e in trajectories for v in e.environment.get("vendor_registry", {})})
+    accounts = sorted({v["account"] for e in trajectories for v in e.environment.get("vendor_registry", {}).values() if v.get("account")})
     return Mandate(amount_cap="1500", allowed_vendors=tuple(vendors), allowed_accounts=tuple(accounts),
                    escalation_conditions=("duplicate", "unapproved_vendor", "missing_information",
                                           "bank_detail_change", "amount_discrepancy"))
 
 
 def demo(count: int = 48, seed: int = 7, repetitions: int = 3, variants: bool = True):
-    distribution, episodes = generate_book(count, seed=seed, vendors=min(16, count), variants=variants)
+    distribution, trajectories = generate_book(count, seed=seed, vendors=min(16, count), variants=variants)
     config = MeasurementConfig(repetitions=repetitions, seed=seed, mode="simulation",
                                bootstrap_samples=500, loss_simulations=1000,
                                severity_assumptions={h: {"distribution": "fixed", "amount": 100, "currency": "USD"} for h in HARM_CLASSES})
     return measure((FunctionImplementation(demo_definition(), reconcile, kind="simulation"),),
-                   distribution, episodes, domain=payments_domain(demo_mandate(episodes)), config=config)
+                   distribution, trajectories, domain=payments_domain(demo_mandate(trajectories)), config=config)
 
 
 def arithmetic_book(count: int = 24, seed: int = 0):
@@ -73,19 +73,19 @@ def arithmetic_book(count: int = 24, seed: int = 0):
     import random
 
     rng = random.Random(seed)
-    episodes = []
+    trajectories = []
     for index in range(count):
         a, b = rng.randint(1, 99), rng.randint(1, 99)
         missing = index % 6 == 5
         construction = {"index": index, "missing_operand": missing, "operands": 2}
-        episodes.append(Episode(id=f"sum-{seed}-{index:04d}", input={"task": f"What is {a} + {'?' if missing else b}?"},
+        trajectories.append(Trajectory(id=f"sum-{seed}-{index:04d}", input={"task": f"What is {a} + {'?' if missing else b}?"},
                                 construction=construction, label=Label.IMPOSSIBLE if missing else Label.EASY,
                                 ground_truth={"value": None if missing else a + b, "escalated": missing},
                                 cluster=f"batch-{index // 4:02d}"))
-    episodes = tuple(episodes)
-    distribution = dataset_distribution("Arithmetic book", episodes, top_cluster="batch",
+    trajectories = tuple(trajectories)
+    distribution = dataset_distribution("Arithmetic book", trajectories, top_cluster="batch",
                                         label_rule="impossible if an operand is missing; otherwise easy")
-    return distribution, episodes
+    return distribution, trajectories
 
 
 def add(context: TrialContext) -> int | None:
@@ -98,8 +98,8 @@ def add(context: TrialContext) -> int | None:
 
 
 def arithmetic_demo(count: int = 24, seed: int = 0, repetitions: int = 2):
-    distribution, episodes = arithmetic_book(count, seed)
+    distribution, trajectories = arithmetic_book(count, seed)
     function = Function(name="add", implementation={"module": "signal_sdk.examples", "callable": "add", "revision": "1"})
-    return measure((FunctionImplementation(function, add, kind="simulation"),), distribution, episodes,
+    return measure((FunctionImplementation(function, add, kind="simulation"),), distribution, trajectories,
                    config=MeasurementConfig(repetitions=repetitions, seed=seed, mode="simulation",
                                             bootstrap_samples=300, loss_simulations=300))

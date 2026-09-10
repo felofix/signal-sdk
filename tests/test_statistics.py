@@ -16,13 +16,13 @@ def test_zero_events_uses_clusters_and_not_repetitions():
     ci = interval([0.] * 100, [str(i // 10) for i in range(100)], samples=200, bounds=(0., 1.))
     assert ci["interval"][1] > .03
     assert "3/n" in ci["zero_event_note"]
-    assert ci["episodes"] == 100 and ci["clusters"] == 10
+    assert ci["trajectories"] == 100 and ci["clusters"] == 10
 
 
 def test_crossing_rejects_unpaired_seeds():
     data = rows()
     data[0]["seed"] = 99999
-    with pytest.raises(ValueError, match="same episodes"):
+    with pytest.raises(ValueError, match="same trajectories"):
         compare(data, "a", "b")
 
 
@@ -54,8 +54,8 @@ def test_pass_power_k_not_at_least_one():
 def test_power_inverse_and_cluster_design_effect():
     small = sample_size(1000, 2, cluster_size=10, icc=0)
     clustered = sample_size(1000, 2, cluster_size=10, icc=.5)
-    assert clustered["episodes"] > small["episodes"]
-    assert detectable_difference(small["episodes"], 2)["detectable_currency_per_10000"] <= 1000
+    assert clustered["trajectories"] > small["trajectories"]
+    assert detectable_difference(small["trajectories"], 2)["detectable_currency_per_10000"] <= 1000
 
 
 def test_calibration_cluster_holdout_and_threshold_fit():
@@ -85,14 +85,14 @@ def test_variants_not_in_measurement_denominator(measurement):
     assert len(all_rows) == len(primary) * 3
     result = robustness(all_rows, bootstrap_samples=200)
     for function in result["functions"].values():
-        assert function["original_episodes_with_variants"] == 16
+        assert function["original_trajectories_with_variants"] == 16
         assert function["cosmetic_outcome_change_fraction"]["estimate"] == 0
 
 
 def test_drift_rejects_non_audit_and_reopened_clusters():
     with pytest.raises(ValueError, match="audited"):
-        detect_drift([{"episode_id": "0", "judged_safe": True}], baselines={"attempts:wrong_account": .1})
-    data = [{"episode_id": str(i), "cluster": c, "audit_selected": True, "judged_safe": True,
+        detect_drift([{"trajectory_id": "0", "judged_safe": True}], baselines={"attempts:wrong_account": .1})
+    data = [{"trajectory_id": str(i), "cluster": c, "audit_selected": True, "judged_safe": True,
              "audit_probability": .1, "human_reviewed": True, "attempted": {"wrong_account": True}}
             for i, c in enumerate(("a", "b", "a"))]
     with pytest.raises(ValueError, match="reopened"):
@@ -100,7 +100,7 @@ def test_drift_rejects_non_audit_and_reopened_clusters():
 
 
 def test_drift_detects_planted_degradation():
-    data = [{"episode_id": str(i), "cluster": str(i), "audit_selected": True, "judged_safe": True,
+    data = [{"trajectory_id": str(i), "cluster": str(i), "audit_selected": True, "judged_safe": True,
              "audit_probability": .1, "human_reviewed": True, "attempted": {"wrong_account": True}}
             for i in range(50)]
     assert detect_drift(data, baselines={"attempts:wrong_account": .1})["metrics"]["attempts:wrong_account"]["alarm"]

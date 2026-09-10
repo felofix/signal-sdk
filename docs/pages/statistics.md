@@ -1,4 +1,8 @@
-# Statistical Methods and Limits
+---
+title: Statistics
+group: Guides
+summary: Estimands, intervals, pairing, difficulty, loss, calibration and drift.
+---
 
 This document defines the estimands and assumptions of the implementation. It
 distinguishes frequentist confidence intervals, approximate posterior intervals,
@@ -6,26 +10,26 @@ and predictive distributions. None is a composite measure of function quality.
 
 ## Crossed Design and Estimands
 
-For episode `e`, function `f`, repetition `r`, let `Y[e,f,r]` be a measured outcome
-or harm indicator. Signal first averages repetitions within an episode, then
-averages those episode values with equal weight. Repetitions assess stability;
-they do not increase the number of independent episodes.
+For trajectory `e`, function `f`, repetition `r`, let `Y[e,f,r]` be a measured outcome
+or harm indicator. Signal first averages repetitions within an trajectory, then
+averages those trajectory values with equal weight. Repetitions assess stability;
+they do not increase the number of independent trajectories.
 
-All functions must have the same `(episode_id, repetition, seed)` keys. Episode
+All functions must have the same `(trajectory_id, repetition, seed)` keys. Trajectory
 labels and top clusters must remain fixed. Duplicate trials, missing pairs, and
 inconsistent repetition sets are rejected. Cosmetic variants are excluded from
 the main book estimand and analyzed with their originals separately.
 
-Attempt rate is the mean probability that a trial of an episode attempts a given
+Attempt rate is the mean probability that a trial of an trajectory attempts a given
 harm. Occurrence rate uses actual environment effects. The report additionally
-counts affected trials and episodes with at least one affected repetition. Those
-counts and the episode-averaged rate answer different questions.
+counts affected trials and trajectories with at least one affected repetition. Those
+counts and the trajectory-averaged rate answer different questions.
 
 ## Paired Cluster Intervals
 
 `interval()` resamples entire top-level clusters with replacement, retaining every
-episode and repetition belonging to each selected cluster. Each bootstrap mean
-remains episode-weighted, so unequal cluster sizes retain their observed book
+trajectory and repetition belonging to each selected cluster. Each bootstrap mean
+remains trajectory-weighted, so unequal cluster sizes retain their observed book
 weights. A cluster-robust Student-t envelope is combined with the bootstrap
 percentile interval to guard against narrow intervals from a small number of
 clusters. Reported bounded rates are restricted to `[0, 1]`.
@@ -49,26 +53,26 @@ precise by counting repeated trials as independent observations.
 
 ### Zero Events
 
-For zero observed independent Bernoulli episodes, the one-sided 95% bound is
+For zero observed independent Bernoulli trajectories, the one-sided 95% bound is
 `1 - 0.05**(1/n)`, approximately `3/n`. The upper endpoint of a central two-sided
 95% interval instead uses `0.025`, approximately `3.69/n`.
 
 With clusters, Signal reports a conservative bound using the independent cluster
 count, scaled by maximum cluster size divided by mean cluster size and capped at
 one. It explicitly states this stronger exchangeable-cluster assumption and
-prints why `3/(episodes * repetitions)` is inappropriate. Constant bounded
+prints why `3/(trajectories * repetitions)` is inappropriate. Constant bounded
 interior estimates use a weighted Hoeffding guard. These guards are conservative
 finite-sample choices, not universal optimal intervals.
 
 ### Pairing and Non-inferiority
 
-For each episode, Signal differences the two functions' paired repetition means.
+For each trajectory, Signal differences the two functions' paired repetition means.
 For correctness, positive advantage is candidate minus reference. For harms,
 positive advantage is reference loss minus candidate loss, multiplied by 10,000.
 The cluster bootstrap resamples these paired differences together.
 
 Every confirmatory comparison needs a pre-set margin. Monetary harm comparisons
-use `loss:<harm>` with a margin in currency per 10,000 episodes. A constant loss
+use `loss:<harm>` with a margin in currency per 10,000 trajectories. A constant loss
 difference has no empirically identified unseen tail: without a declared maximum
 severity the interval is unavailable and non-inferiority is not established.
 `maximum_severity` bounds the entire harm-class loss of a trial, not a single
@@ -87,12 +91,12 @@ calibration-curve points are exploratory. No p-values are emitted.
 
 ## Consistency and Process
 
-`pass_power_k` is the fraction of episodes for which **every** repetition is
+`pass_power_k` is the fraction of trajectories for which **every** repetition is
 correct. It is pass^k, not the fraction with at least one success. With exactly
 `k` observed repetitions this is a direct empirical all-pass fraction; the SDK
 does not infer independence among repetitions by exponentiating a pass rate.
 
-Path consistency is the fraction of episodes whose repetitions have identical
+Path consistency is the fraction of trajectories whose repetitions have identical
 ordered tool-name sequences. The SHA-256 signature deliberately excludes
 arguments and timing; inspect transcripts to compare arguments. Both consistency
 fractions get cluster intervals. Cost includes recorded mean/interval, median,
@@ -103,7 +107,7 @@ monetary usage is counted and is not replaced with zero.
 
 `sample_size()` and `detectable_difference()` use a paired normal approximation
 with a cluster design effect `1 + (mean_cluster_size - 1) * ICC`. Inputs are the
-paired episode-level monetary standard deviation, target margin/difference,
+paired trajectory-level monetary standard deviation, target margin/difference,
 power, cluster size, ICC, and confirmatory family size. The non-inferiority
 planning scenario assumes true advantage zero.
 
@@ -120,8 +124,8 @@ The binary correctness model is:
 ```text
 logit P(correct[e,f,r]) = function * label fixed effects
                          + top-cluster random intercept
-                         + episode random intercept
-                         + episode:function random intercept
+                         + trajectory random intercept
+                         + trajectory:function random intercept
 ```
 
 There is no discrimination parameter. Conditional random effects are independent
@@ -137,7 +141,7 @@ Hyperparameter/coefficient correlations remain approximate. These are explicitly
 approximate Bayesian credible intervals, not frequentist 95% coverage guarantees.
 
 For empirical difficulty under assessment of function `f`, all of `f`'s rows are
-removed and the model is fitted again. Per-episode predicted failure probabilities
+removed and the model is fitted again. Per-trajectory predicted failure probabilities
 and intervals come from the remaining functions. They are relative to those
 functions; trivial controls alone are a weak panel for evaluating a sophisticated
 function. A useful empirical difficulty distribution needs several informative
@@ -151,10 +155,10 @@ correctness by label.
 
 ### Future Book
 
-Prediction samples parameter uncertainty, new independent clusters, new episode
-and episode/function effects, and binary results for 10,000 future episodes.
+Prediction samples parameter uncertainty, new independent clusters, new trajectory
+and trajectory/function effects, and binary results for 10,000 future trajectories.
 It assumes the observed label mixture and mean cluster size. The comparison
-interval for the measured book conditions on its fitted episode effects; it is
+interval for the measured book conditions on its fitted trajectory effects; it is
 distinct from the top-cluster population-rate confidence interval.
 
 The report explicitly checks that the new-book predictive interval is wider than
@@ -164,18 +168,18 @@ this check. Width is not a universal mathematical ordering for arbitrary
 datasets and models; a failed check in a real book prevents treating that model
 prediction as validated.
 
-At least 12 episodes, two functions, and four clusters are required to attempt a
+At least 12 trajectories, two functions, and four clusters are required to attempt a
 fit. These are computation guards, not evidence that such a small fit is reliable.
 Nonconvergence or insufficient design produces `not_estimable` or
 `insufficient_data`. Dense joint covariance requires quadratic memory in the
 number of random effects; this initial implementation targets modest constructed
-books, not millions of episodes.
+books, not millions of trajectories.
 
 ## Calibration and Review Curves
 
 Risk signals must be finite probabilities recorded before the first action. The
 last such signal is used. Signals and event frequencies are averaged within
-episodes. Top-level clusters are split reproducibly into training and held-out
+trajectories. Top-level clusters are split reproducibly into training and held-out
 halves. Missing signals are excluded and counted; at least four usable clusters
 are needed. Calibration bins compare mean signal with attempted-event frequency.
 
@@ -195,8 +199,8 @@ does not guarantee future residual loss. There is no operational routing product
 Cosmetic variants require identical ground truth, labels, clusters, repetition
 indices, and seeds. Comparison uses canonical actual payment/email/hold/escalation
 signatures, not correctness alone: two different wrong outcomes count as a
-change. Variants/repetitions are averaged within the original episode before
-cluster bootstrapping. Tool-fault mishandling is reported conditional on episodes
+change. Variants/repetitions are averaged within the original trajectory before
+cluster bootstrapping. Tool-fault mishandling is reported conditional on trajectories
 where a fault was injected. An unexercised injected fault is not automatically
 called mishandled.
 
@@ -209,7 +213,7 @@ coefficient of variation. These are assumptions, not fitted severity guarantees.
 
 Frequency uses an explicitly assumed beta distribution with Jeffreys prior
 `Beta(0.5, 0.5)` and effective cluster information
-`(sum cluster_sizes)^2 / sum(cluster_sizes^2)`. The observed episode occurrence
+`(sum cluster_sizes)^2 / sum(cluster_sizes^2)`. The observed trajectory occurrence
 rate forms fractional pseudo-counts. This is a conservative information model,
 not an exact posterior for arbitrary clustered data. Given a sampled frequency,
 future counts are binomial and severities are independent. Extra future cluster
@@ -223,7 +227,7 @@ satisfy several graders.
 
 ## Audit-Only Sequential Drift
 
-Drift consumes randomly audited, human-reviewed safe episodes with a common
+Drift consumes randomly audited, human-reviewed safe trajectories with a common
 positive inclusion probability. Each completed top-level cluster is consumed
 once, in order, and cluster means are weighted equally. Baselines must have the
 same estimand and be fixed before monitoring. Cost requires a predeclared true

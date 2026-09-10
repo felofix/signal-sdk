@@ -22,7 +22,7 @@ def test_html_escapes_transcript_and_keeps_goals(measurement):
 
 def test_trace_sequence_data(measurement):
     graphs = build_flamegraph_data(measurement)
-    assert len(graphs) == len(measurement.episodes) * len(measurement.functions)
+    assert len(graphs) == len(measurement.trajectories) * len(measurement.functions)
     assert all(g.trials == 2 for g in graphs)
 
 

@@ -1,4 +1,4 @@
-"""Logistic mixed effects for episode difficulty and new-book prediction."""
+"""Logistic mixed effects for trajectory difficulty and new-book prediction."""
 
 from __future__ import annotations
 
@@ -17,8 +17,8 @@ from .core import Rows, validate_rows
 def _fit(frame: pd.DataFrame) -> Any:
     model = BinomialBayesMixedGLM.from_formula(
         "correct ~ C(function_id) * C(label)",
-        {"cluster": "0 + C(cluster)", "episode": "0 + C(episode_id)",
-         "episode_function": "0 + C(cell)"}, frame, vcp_p=.5, fe_p=2,
+        {"cluster": "0 + C(cluster)", "trajectory": "0 + C(trajectory_id)",
+         "trajectory_function": "0 + C(cell)"}, frame, vcp_p=.5, fe_p=2,
     )
     size = model.k_fep + model.k_vcp + model.k_vc
     with warnings.catch_warnings():
@@ -49,23 +49,23 @@ def _joint_draws(fit: Any, draws: int, rng: np.random.Generator) -> tuple[np.nda
     return joint[:, :model.k_fep], joint[:, model.k_fep:]
 
 
-def difficulty(rows: Rows, *, seed: int = 0, future_episodes: int = 10000,
+def difficulty(rows: Rows, *, seed: int = 0, future_trajectories: int = 10000,
                draws: int = 1000) -> dict[str, Any]:
     """Fit a regularized binomial mixed model; all intervals here are Bayesian.
 
     Empirical difficulty for a function is refitted after excluding its trials.
-    The prediction model samples new clusters, episodes, and episode/function
+    The prediction model samples new clusters, trajectories, and trajectory/function
     effects, as well as parameter uncertainty and Bernoulli outcomes.
     """
     validate_rows(rows)
-    if future_episodes < 1 or draws < 100:
+    if future_trajectories < 1 or draws < 100:
         raise ValueError("A positive horizon and at least 100 posterior draws are required")
     frame = pd.DataFrame([{k: r[k] for k in
-                          ("episode_id", "function_id", "cluster", "label", "correct")} for r in rows])
+                          ("trajectory_id", "function_id", "cluster", "label", "correct")} for r in rows])
     frame["correct"] = frame["correct"].astype(int)
-    frame["cell"] = frame["episode_id"] + "::" + frame["function_id"]
-    if frame.episode_id.nunique() < 12 or frame.function_id.nunique() < 2 or frame.cluster.nunique() < 4:
-        return {"status": "insufficient_data", "reason": "Need 12 episodes, two functions and four clusters",
+    frame["cell"] = frame["trajectory_id"] + "::" + frame["function_id"]
+    if frame.trajectory_id.nunique() < 12 or frame.function_id.nunique() < 2 or frame.cluster.nunique() < 4:
+        return {"status": "insufficient_data", "reason": "Need 12 trajectories, two functions and four clusters",
                 "empirical_difficulty": {}, "predictions": {}}
     try:
         fit = _fit(frame)
@@ -73,7 +73,7 @@ def difficulty(rows: Rows, *, seed: int = 0, future_episodes: int = 10000,
         return {"status": "not_estimable", "reason": str(exc), "empirical_difficulty": {}, "predictions": {}}
     model = fit.model
     rng = np.random.default_rng(seed)
-    # Fixed intercepts and episode effects are strongly correlated. Independent
+    # Fixed intercepts and trajectory effects are strongly correlated. Independent
     # variational draws lose their cancellation on the measured book and can
     # invert the relationship between finite-book and new-book uncertainty.
     # Recover joint conditional covariance from the logistic posterior Hessian.
@@ -95,17 +95,17 @@ def difficulty(rows: Rows, *, seed: int = 0, future_episodes: int = 10000,
         leave_fixed, leave_random = _joint_draws(without, draws, rng)
         failure_draws = 1 - expit(leave_fixed @ without.model.exog.T
                                  + np.asarray(without.model.exog_vc @ leave_random.T).T)
-        episode_intervals = {str(episode): _posterior_interval(failure_draws[:, np.flatnonzero(training.episode_id.to_numpy() == episode)].mean(axis=1))
-                             for episode in training.episode_id.unique()}
+        trajectory_intervals = {str(trajectory): _posterior_interval(failure_draws[:, np.flatnonzero(training.trajectory_id.to_numpy() == trajectory)].mean(axis=1))
+                             for trajectory in training.trajectory_id.unique()}
         empirical[function_id] = {
             "status": "estimated", "excluded_function_id": function_id,
             "training_function_ids": sorted(training.function_id.unique()),
-            "episodes": {str(e): float(v) for e, v in
-                         work.groupby("episode_id").estimated_failure.mean().items()},
-            "episode_intervals": episode_intervals,
+            "trajectories": {str(e): float(v) for e, v in
+                         work.groupby("trajectory_id").estimated_failure.mean().items()},
+            "trajectory_intervals": trajectory_intervals,
             "interpretation": "Predicted failure on the other measured functions; the assessed function's trials were excluded before fitting.",
         }
-    observed = frame.drop_duplicates(["episode_id", "function_id"])
+    observed = frame.drop_duplicates(["trajectory_id", "function_id"])
     fitted_fixed = model.exog @ fit.fe_mean
     label_frame = frame.assign(fixed=fitted_fixed)
     label_means = label_frame.groupby("label").fixed.mean()
@@ -117,9 +117,9 @@ def difficulty(rows: Rows, *, seed: int = 0, future_episodes: int = 10000,
     label_fraction_draws = label_draw_variance / (label_draw_variance + variances.sum(axis=1) + np.pi ** 2 / 3)
     predictions = {}
     rates = {}
-    # Integrate episode effects for finite-book means. For a future book,
+    # Integrate trajectory effects for finite-book means. For a future book,
     # retain the observed label mix and cluster-size assumption, sampling new effects.
-    cluster_size = max(1, round(frame.episode_id.nunique() / frame.cluster.nunique()))
+    cluster_size = max(1, round(frame.trajectory_id.nunique() / frame.cluster.nunique()))
     for function_id in sorted(frame.function_id.unique()):
         indices = observed.index[observed.function_id == function_id].to_numpy()
         x = model.exog[indices]
@@ -128,15 +128,15 @@ def difficulty(rows: Rows, *, seed: int = 0, future_episodes: int = 10000,
         finite_mean = finite_probabilities.mean(axis=1)
         future_rates = np.empty(draws)
         future_expected = np.empty(draws)
-        # Posterior predictive simulation includes fresh episode difficulty,
-        # function-specific episode effects and correlated cluster effects.
+        # Posterior predictive simulation includes fresh trajectory difficulty,
+        # function-specific trajectory effects and correlated cluster effects.
         for d in range(draws):
-            chosen = rng.integers(0, len(x), future_episodes)
+            chosen = rng.integers(0, len(x), future_trajectories)
             linear = x[chosen] @ fixed[d]
-            new_clusters = (future_episodes + cluster_size - 1) // cluster_size
+            new_clusters = (future_trajectories + cluster_size - 1) // cluster_size
             effects = rng.normal(0, np.sqrt(variances[d, 0]), new_clusters)
-            linear += np.repeat(effects, cluster_size)[:future_episodes]
-            linear += rng.normal(0, np.sqrt(variances[d, 1] + variances[d, 2]), future_episodes)
+            linear += np.repeat(effects, cluster_size)[:future_trajectories]
+            linear += rng.normal(0, np.sqrt(variances[d, 1] + variances[d, 2]), future_trajectories)
             probability = expit(linear)
             future_expected[d] = probability.mean()
             future_rates[d] = rng.binomial(1, probability).mean()
@@ -148,8 +148,8 @@ def difficulty(rows: Rows, *, seed: int = 0, future_episodes: int = 10000,
                                                      "interval": finite_interval},
             "next_book_correct_rate": {"estimate": float(future_rates.mean()),
                                        "interval": predictive_interval},
-            "next_book_correct_count": {"estimate": float(future_rates.mean() * future_episodes),
-                                         "interval": [v * future_episodes for v in predictive_interval]},
+            "next_book_correct_count": {"estimate": float(future_rates.mean() * future_trajectories),
+                                         "interval": [v * future_trajectories for v in predictive_interval]},
             "prediction_wider_than_measured_interval": bool(wider),
             "status": "estimated" if wider else "prediction_width_check_failed",
         }
@@ -163,7 +163,7 @@ def difficulty(rows: Rows, *, seed: int = 0, future_episodes: int = 10000,
                                             "interval": _posterior_interval(probabilities)}
     return {
         "status": "estimated", "method": "Bayesian binomial mixed model; variational means and variance components with joint conditional Laplace coefficient covariance",
-        "formula": "correct ~ function * label + (1|cluster) + (1|episode) + (1|episode:function)",
+        "formula": "correct ~ function * label + (1|cluster) + (1|trajectory) + (1|trajectory:function)",
         "interval_kind": "95% approximate posterior credible/predictive intervals, not frequentist confidence intervals",
         "priors": {"fixed_effect_normal_sd": 2, "log_random_effect_sd_normal_sd": .5},
         "fixed_effects": {name: {"estimate": float(mean), "interval": _posterior_interval(fixed[:, index])}
@@ -173,7 +173,7 @@ def difficulty(rows: Rows, *, seed: int = 0, future_episodes: int = 10000,
         "label_explained_definition": "Variance of label-specific mean fixed log-odds / (that variance + random-effect variances + logistic residual variance)",
         "function_by_label_correct_probability_at_zero_random_effect": rates,
         "empirical_difficulty": empirical, "predictions": predictions,
-        "future_episodes": future_episodes, "posterior_draws": draws,
+        "future_trajectories": future_trajectories, "posterior_draws": draws,
         "future_cluster_size_assumption": cluster_size,
         "assumptions": ["Random intercepts are independent Gaussian components conditional on the fixed effects.",
                         "The future book retains the observed label mixture and mean cluster size.",

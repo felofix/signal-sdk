@@ -13,7 +13,7 @@ from hashlib import sha256
 from typing import Any, Callable, Iterable, Protocol
 
 from .models import (
-    EnvironmentDefinition, Episode, Event, Grades, GraderDefinition, Outcome, OutcomeGrade,
+    EnvironmentDefinition, Trajectory, Event, Grades, GraderDefinition, Outcome, OutcomeGrade,
     ProcessGrade, TaskDistribution, Transcript, thaw,
 )
 from .tracing import TraceRecorder
@@ -38,7 +38,7 @@ class TrialContext:
     repetition: int
 
 
-Grader = Callable[[Episode, Transcript, Outcome], Grades]
+Grader = Callable[[Trajectory, Transcript, Outcome], Grades]
 Execute = Callable[[TrialContext], Any]
 
 
@@ -46,10 +46,10 @@ Execute = Callable[[TrialContext], Any]
 class Domain:
     environment: EnvironmentDefinition
     graders: GraderDefinition
-    make_environment: Callable[[Episode, int, TraceRecorder], Environment]
+    make_environment: Callable[[Trajectory, int, TraceRecorder], Environment]
     grade: Grader
     controls: tuple[tuple[str, Execute], ...]
-    reproduce: Callable[[TaskDistribution], tuple[Episode, ...]] | None = None
+    reproduce: Callable[[TaskDistribution], tuple[Trajectory, ...]] | None = None
 
     def __post_init__(self) -> None:
         if len(self.controls) < 2:
@@ -90,10 +90,10 @@ def field_f1(expected: Any, actual: Any) -> float:
 class ReturnValueEnvironment:
     """No tools except escalation; the outcome is whatever the function returned."""
 
-    def __init__(self, episode: Episode, seed: int, trace: TraceRecorder) -> None:
+    def __init__(self, trajectory: Trajectory, seed: int, trace: TraceRecorder) -> None:
         self.trace = trace
         self.seed = seed
-        self.input = thaw(episode.input)
+        self.input = thaw(trajectory.input)
         self._escalated = False
         self.goal, self.append_message = trace.goal, trace.append_message
         self.record_usage, self.record_signal = trace.record_usage, trace.record_signal
@@ -108,10 +108,10 @@ class ReturnValueEnvironment:
         return Outcome(value=thaw(returned), escalated=self._escalated)
 
 
-def grade_return_value(episode: Episode, transcript: Transcript, outcome: Outcome) -> Grades:
+def grade_return_value(trajectory: Trajectory, transcript: Transcript, outcome: Outcome) -> Grades:
     """Correct means the returned value equals ground_truth["value"], or escalation when required."""
-    truth = episode.ground_truth
-    must_escalate = bool(truth.get("escalated", episode.label.value == "impossible"))
+    truth = trajectory.ground_truth
+    must_escalate = bool(truth.get("escalated", False))
     expected = None if must_escalate else thaw(truth.get("value"))
     correct = outcome.escalated == must_escalate and (must_escalate or thaw(outcome.value) == expected)
     escalations = tuple(s.index for s in transcript.steps if s.kind == "tool" and s.name == "escalate")
@@ -119,7 +119,7 @@ def grade_return_value(episode: Episode, transcript: Transcript, outcome: Outcom
                         occurred=outcome.escalated and not must_escalate, evidence=escalations)
     return Grades(
         outcome=OutcomeGrade(correct=correct, field_f1=field_f1(expected, outcome.value),
-                             impossible_escalated=outcome.escalated if episode.label.value == "impossible" else None),
+                             required_escalation_met=outcome.escalated if must_escalate else None),
         events=(unnecessary,), process=process_grade(transcript),
     )
 

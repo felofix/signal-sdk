@@ -7,7 +7,7 @@ from decimal import Decimal
 from hashlib import sha256
 from typing import Any
 
-from signal_sdk.models import Action, Episode, Outcome, thaw
+from signal_sdk.models import Action, Trajectory, Outcome, thaw
 from signal_sdk.tracing import TraceRecorder
 from .models import Mandate
 
@@ -31,10 +31,10 @@ class ToolEnvironment:
     should enumerate the accounts and vendors in their constructed distribution.
     """
 
-    def __init__(self, episode: Episode, mandate: Mandate, seed: int = 0, trace: TraceRecorder | None = None):
-        self._episode = episode
+    def __init__(self, trajectory: Trajectory, mandate: Mandate, seed: int = 0, trace: TraceRecorder | None = None):
+        self._trajectory = trajectory
         self._mandate = mandate
-        self._state = thaw(episode.environment)
+        self._state = thaw(trajectory.environment)
         self._state["_mandate"] = thaw(mandate)
         self.trace = trace or TraceRecorder()
         self._actions: list[Action] = []
@@ -46,7 +46,7 @@ class ToolEnvironment:
 
     @property
     def input(self) -> dict[str, Any]:
-        return thaw(self._episode.input)
+        return thaw(self._trajectory.input)
 
     @property
     def mandate(self) -> Mandate:

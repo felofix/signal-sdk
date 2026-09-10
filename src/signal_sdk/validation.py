@@ -13,10 +13,10 @@ from .models import content_hash, freeze, thaw
 from .statistics import calibrate, compare, difficulty, interval, loss_distribution
 
 
-def _row(episode: int, function: str, repetition: int, cluster: int,
+def _row(trajectory: int, function: str, repetition: int, cluster: int,
          correct: bool, harm: bool, *, label: str = "easy", cost: float = .01) -> dict:
-    return {"episode_id": str(episode), "function_id": function, "repetition": repetition,
-            "seed": episode * 10 + repetition, "cluster": str(cluster), "label": label,
+    return {"trajectory_id": str(trajectory), "function_id": function, "repetition": repetition,
+            "seed": trajectory * 10 + repetition, "cluster": str(cluster), "label": label,
             "correct": correct, "path_signature": "pay" if correct else "escalate",
             "cost": cost, "latency_ms": 5., "tokens": 10, "steps": 2, "retries": 0,
             "schema_valid": True, "attempted": {"wrong_account": harm},
@@ -35,8 +35,8 @@ def statistical_checks(seed: int = 1729) -> list[dict]:
     simulations = 150
     for simulation in range(simulations):
         cluster_probability = rng.beta(.2 * 5, .8 * 5, 40)
-        episodes = rng.binomial(1, np.repeat(cluster_probability, 4)).astype(float)
-        estimate = interval(episodes, [str(i // 4) for i in range(160)],
+        trajectories = rng.binomial(1, np.repeat(cluster_probability, 4)).astype(float)
+        estimate = interval(trajectories, [str(i // 4) for i in range(160)],
                             samples=300, seed=seed + simulation, bounds=(0., 1.))
         covered += estimate["interval"][0] <= .2 <= estimate["interval"][1]
     monte_carlo = binomtest(covered, simulations).proportion_ci(.95)
@@ -74,7 +74,7 @@ def statistical_checks(seed: int = 1729) -> list[dict]:
     correlations = []
     for result in model.get("empirical_difficulty", {}).values():
         if result.get("status") == "estimated":
-            predicted = [result["episodes"][str(e)] for e in range(len(planted))]
+            predicted = [result["trajectories"][str(e)] for e in range(len(planted))]
             correlations.append(float(spearmanr(planted, predicted).statistic))
     checks.append(_check("difficulty_recovers_planted_order", len(correlations) == 3 and min(correlations) > .5,
                          leave_function_out_correlations=correlations, acceptance_minimum=.5,
@@ -100,16 +100,16 @@ def _control_check() -> dict:
     from .domains.payments import broad_mandate, generate_book, payments_domain
     from .runner import _execute, control_functions
 
-    distribution, episodes = generate_book(40, seed=23, vendors=10,
+    distribution, trajectories = generate_book(40, seed=23, vendors=10,
                                            hazard_rates={"bank_detail_change": .4}, impossible_rate=.2)
-    domain = payments_domain(broad_mandate(episodes))
-    results = {control.definition.name: [_execute(control, episode, 0, 0, domain) for episode in episodes]
+    domain = payments_domain(broad_mandate(trajectories))
+    results = {control.definition.name: [_execute(control, trajectory, 0, 0, domain) for trajectory in trajectories]
                for control in control_functions(domain)}
     def harm(name: str, key: str) -> int:
         return sum(event.attempted for trial in results[name] for event in trial.grades.events if event.harm == key)
     pay_wrong, escalate_wrong = harm("always_pay", "wrong_account"), harm("always_escalate", "wrong_account")
     pay_unnecessary, escalate_unnecessary = harm("always_pay", "unnecessary_escalation"), harm("always_escalate", "unnecessary_escalation")
-    easy = [i for i, episode in enumerate(episodes) if episode.ground_truth.get("payments")]
+    easy = [i for i, trajectory in enumerate(trajectories) if trajectory.ground_truth.get("payments")]
     separates = (pay_wrong > escalate_wrong and escalate_unnecessary > pay_unnecessary
                  and any(results["always_pay"][i].grades.outcome.correct
                          and not results["always_escalate"][i].grades.outcome.correct for i in easy))

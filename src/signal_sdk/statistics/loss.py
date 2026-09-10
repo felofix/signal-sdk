@@ -7,7 +7,7 @@ from typing import Any
 
 import numpy as np
 
-from .core import Rows, episode_groups, estimate_metric, validate_rows
+from .core import Rows, trajectory_groups, estimate_metric, validate_rows
 
 
 def loss_distribution(rows: Rows, *, function_id: str, severity_assumptions: Mapping[str, Mapping[str, Any]],
@@ -17,7 +17,7 @@ def loss_distribution(rows: Rows, *, function_id: str, severity_assumptions: Map
     if simulations < 100 or horizon < 1:
         raise ValueError("Use at least 100 simulations and a positive horizon")
     rng = np.random.default_rng(seed)
-    groups = episode_groups(selected)
+    groups = trajectory_groups(selected)
     cluster_sizes: dict[str, int] = {}
     for trials in groups.values():
         cluster = str(trials[0]["cluster"])
@@ -42,8 +42,8 @@ def loss_distribution(rows: Rows, *, function_id: str, severity_assumptions: Map
         cv = float(assumptions.get("coefficient_of_variation", 1))
         if not np.isfinite(cv) or cv <= 0:
             raise ValueError("coefficient_of_variation must be positive and finite")
-        episode_rates = [np.mean([bool(r.get("occurred", {}).get(harm, False)) for r in trials]) for trials in groups.values()]
-        frequency = float(np.mean(episode_rates))
+        trajectory_rates = [np.mean([bool(r.get("occurred", {}).get(harm, False)) for r in trials]) for trials in groups.values()]
+        frequency = float(np.mean(trajectory_rates))
         # Clusters, not repeated trials, determine frequency information.
         # Fractional pseudo-counts form an explicitly assumed conservative
         # beta model; these are posterior predictions, not bootstrap CIs.
@@ -73,11 +73,11 @@ def loss_distribution(rows: Rows, *, function_id: str, severity_assumptions: Map
                                             "posterior_alpha": a, "posterior_beta": b,
                                             "effective_independent_clusters": effective_clusters},
                         "interval_kind": "95% assumption-dependent posterior credible/predictive intervals"}
-    return {"function_id": function_id, "horizon_episodes": horizon, "simulations": simulations, "seed": seed,
+    return {"function_id": function_id, "horizon_trajectories": horizon, "simulations": simulations, "seed": seed,
             "harms": output,
             "assumptions": ["Severity distributions are assumptions, not inferred guarantees.",
                             "Frequency uses an assumed beta model with effective top-level cluster counts and Jeffreys prior.",
                             "Future occurrence counts are conditionally binomial; clustered bursts beyond parameter uncertainty are not modeled.",
-                            "Severity is independent of frequency and episodes within each harm class.",
+                            "Severity is independent of frequency and trajectories within each harm class.",
                             "Harm classes are reported separately because the same occurrence may satisfy multiple graders.",
                             "Zero observed events retain nonzero frequency uncertainty."]}

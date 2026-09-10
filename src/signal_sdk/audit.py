@@ -1,4 +1,4 @@
-"""Random selection among safe episodes and audit-only drift inputs."""
+"""Random selection among safe trajectories and audit-only drift inputs."""
 
 from random import SystemRandom
 from typing import Any
@@ -20,8 +20,8 @@ def audit_drift(samples: tuple[AuditSample, ...], *, baselines: dict[str, float]
     if len({s.function_id for s in samples}) > 1:
         raise ValueError("Monitor one function identity at a time")
     if list(samples) != sorted(samples, key=lambda s: s.timestamp):
-        raise ValueError("Audit episodes must arrive in chronological order")
-    rows = [{"episode_id": s.episode_id, "cluster": s.cluster, "judged_safe": s.judged_safe,
+        raise ValueError("Audit trajectories must arrive in chronological order")
+    rows = [{"trajectory_id": s.trajectory_id, "cluster": s.cluster, "judged_safe": s.judged_safe,
              "audit_selected": s.selected_for_audit, "audit_probability": s.inclusion_probability,
              "human_reviewed": s.human_reviewed, "attempted": dict(s.attempted), "cost": s.cost}
             for s in samples]

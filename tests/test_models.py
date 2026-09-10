@@ -31,12 +31,12 @@ def test_function_needs_an_implementation_identity():
                  models=(ModelIdentity(provider="p", name="m", version="2"),))
 
 
-def test_nested_immutable(clean_episode):
+def test_nested_immutable(clean_trajectory):
     with pytest.raises(TypeError):
-        clean_episode.environment["documents"][0]["amount"] = "1"
+        clean_trajectory.environment["documents"][0]["amount"] = "1"
     with pytest.raises(ValidationError):
-        clean_episode.id = "other"
-    changed = clean_episode.model_copy(update={"input": {"task": ["x"]}})
+        clean_trajectory.id = "other"
+    changed = clean_trajectory.model_copy(update={"input": {"task": ["x"]}})
     with pytest.raises(TypeError):
         changed.input["task"][0] = "y"
 
