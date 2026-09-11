@@ -6,7 +6,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/felofix/signal-sdk"
+    "url": "git+https://github.com/felofix/signal-sdk.git"
   },
   "homepage": "https://felofix.github.io/signal-sdk/",
   "engines": {
@@ -26,7 +26,7 @@
     "./langchain": "./dist/src/langchain.js"
   },
   "bin": {
-    "signal-sdk": "./dist/src/cli.js"
+    "signal-sdk": "dist/src/cli.js"
   },
   "files": [
     "dist/src",
