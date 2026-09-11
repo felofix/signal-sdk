@@ -1,8 +1,8 @@
 # Release Guide
 
-The package is `@felofix/signal-sdk` (import `@felofix/signal-sdk`, binary `@felofix/signal-sdk`), TypeScript
-compiled to ESM for Node 20+. Nothing has been published to npm yet. Check name
-availability and the intended npm owner before publishing.
+The package is `@felofix/signal-sdk` (import `@felofix/signal-sdk`, binary `signal-sdk`), TypeScript
+compiled to ESM for Node 20+. First published as 0.6.0 on 2026-09-11 from the `felofix`
+npm account; the bare name `signal-sdk` belongs to an unrelated package.
 
 ## Verify the Source
 
