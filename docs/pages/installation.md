@@ -50,7 +50,7 @@ npm install ../signal-sdk/signal-sdk-0.4.0.tgz    # in your project
 
 ```ts
 import { measure } from "signal-sdk";
-import { paymentsDomain } from "signal-sdk/domains/payments";
+import { paymentsEnvironment } from "signal-sdk/environments/payments";
 import { certificates } from "signal-sdk/certificate";
 import { summarize } from "signal-sdk/statistics";
 ```

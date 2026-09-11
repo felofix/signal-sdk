@@ -5,14 +5,14 @@
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import { compareMeasurements } from "../src/certificate.js";
-import { generateBook, paymentsDomain } from "../src/domains/payments/index.js";
+import { generateBook, paymentsEnvironment } from "../src/environments/payments/index.js";
 import { demoDefinition, demoMandate, reconcile } from "../src/examples.js";
 import { ComparisonPlan, ConfirmatoryComparison, FunctionImplementation, MeasurementConfig, measure } from "../src/index.js";
 
 const slightlyDifferentPolicy: typeof reconcile = (context) => `Completed: ${reconcile(context)}`;
 
 const { distribution, scenarios } = generateBook(24, { seed: 31, vendors: 8 });
-const domain = paymentsDomain(demoMandate(scenarios));
+const environment = paymentsEnvironment(demoMandate(scenarios));
 const before = demoDefinition("policy-before").with({ implementation: { callable: "reconcile", revision: "1" } });
 const after = demoDefinition("policy-after").with({ implementation: { callable: "slightlyDifferentPolicy", revision: "2" } });
 const plan = new ComparisonPlan({ declaredAt: new Date().toISOString(), comparisons: [
@@ -20,8 +20,8 @@ const plan = new ComparisonPlan({ declaredAt: new Date().toISOString(), comparis
 ] });
 const config = new MeasurementConfig({ mode: "simulation", repetitions: 2, seed: 19, prepostPlan: plan, bootstrapSamples: 300, lossSimulations: 300,
   severityAssumptions: { wrong_account: { amount: 500, currency: "USD" } } });
-const pre = await measure([new FunctionImplementation(before, reconcile, "simulation")], distribution, scenarios, { domain, config });
-const post = await measure([new FunctionImplementation(after, slightlyDifferentPolicy, "simulation")], distribution, scenarios, { domain, config });
+const pre = await measure([new FunctionImplementation(before, reconcile, "simulation")], distribution, scenarios, { environment, config });
+const post = await measure([new FunctionImplementation(after, slightlyDifferentPolicy, "simulation")], distribution, scenarios, { environment, config });
 const comparison = compareMeasurements(pre, post) as { pairedDifferences: { comparisons: { conclusion: string }[] }[] };
 mkdirSync("outputs/paired", { recursive: true });
 writeFileSync("outputs/paired/pre.json", JSON.stringify(pre, null, 2));

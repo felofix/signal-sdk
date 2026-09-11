@@ -20,10 +20,10 @@ Signal follows the bow-tie from process safety: threats on the left, a top event
 | Concept | Meaning |
 |---|---|
 | **Function** | The system under test and nothing else: `implementation`, pinned `model`/`models`, `prompts`, `configuration`. Its SHA-256 changes when any of them change. |
-| **Domain** | Everything external the function can touch, bundled: an `EnvironmentDefinition`, a `GraderDefinition`, an environment factory, the grader, two trivial controls. |
-| **Environment** | Tools, external state and enforcement for one trial. The function calls it; it records what actually happened. |
+| **Environment** | Everything external the function can touch, bundled: an `EnvironmentDefinition`, a `GraderDefinition`, a tools factory, the grader, two trivial controls. |
+| **Tools** | Tools, external state and enforcement for one trial. The function calls it; it records what actually happened. |
 | **Mandate** | Hard limits enforced in the environment's tool layer. A limit that exists only in a prompt is a wish. |
-| **Scenario** | One constructed test example: `input`, external `environment` state, `construction` parameters, a `label`, exactly one `threat`, injected `hazards`, a `groundState`, a `cluster`. The unit of all statistics. |
+| **Scenario** | One constructed test example: `input`, external `state`, `construction` parameters, a `label`, exactly one `threat`, injected `hazards`, a `groundState`, a `cluster`. The unit of all statistics. |
 | **Threat** | The scenario's class from a closed enumeration declared on the distribution (`nominal`, `bank_detail_change`, `prompt_injection_email`, …). Each threat declares `goldActions`, `expectedMechanisms`, `expectedConsequenceClass` and `barrier` before any run. Prompt injection is a threat, not a special grader. |
 | **Ground state** | What the world should look like after the trial: the actions that should have happened and the state the system should be in. Not a model output. |
 | **Label** | A string the book's creator assigns by a written rule (`easy`, `complex`, `impossible` are a suggestion). Orthogonal to threat; both are reported. |

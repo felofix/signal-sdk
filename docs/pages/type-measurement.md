@@ -50,7 +50,7 @@ console.assert(restored.id === measurement.id);
 | `functions` | All measured functions including controls. |
 | `distribution`, `environment`, `graders` | The bound `TaskDistribution`, `EnvironmentDefinition`, `GraderDefinition`. |
 | `validity` | Optional `ValidityPeriod`; the timestamp must fall inside it. |
-| `controlIds` | Function IDs of the domain's controls. |
+| `controlIds` | Function IDs of the environment's controls. |
 | `scenarios`, `trials` | The book and the complete crossing. |
 | `timestamp` | ISO-8601 with timezone. |
 | `config` | The `MeasurementConfig`. |

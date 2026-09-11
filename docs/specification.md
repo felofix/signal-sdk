@@ -7,21 +7,21 @@ explorer, terminal view and local API. No framework dependency is included.
 | Requirement | Implementation | Important limit |
 |---|---|---|
 | Function identity | `Function`: models, prompts, implementation, configuration | Tools, mandate, distribution and period are external; `Measurement.bindingId` ties them to the function IDs. |
-| External environment | `EnvironmentDefinition` supplied by a `Domain` | One environment per measurement; comparing environments means comparing measurements. |
-| Tool-enforced mandate | `domains/payments` `ToolEnvironment` | Payment cap is per action; vendor/account/currency restrictions, no cumulative budget or email recipient rule. Other domains enforce their own. |
-| Distribution binding | Domain `reproduce` for generated books or complete dataset hash | Custom label-rule correctness is the constructor's responsibility. |
+| External environment | `EnvironmentDefinition` supplied by an `Environment` | One environment per measurement; comparing environments means comparing measurements. |
+| Tool-enforced mandate | `environments/payments` `PaymentTools` | Payment cap is per action; vendor/account/currency restrictions, no cumulative budget or email recipient rule. Other environments enforce their own. |
+| Distribution binding | Environment `reproduce` for generated books or complete dataset hash | Custom label-rule correctness is the constructor's responsibility. |
 | Scenarios, labels and hazards | `Scenario.label` is any string fixed by the creator; payments `generators` inject eight hazard types | The label rule is written into the distribution; the SDK never constrains the vocabulary. |
 | Ground states | `Scenario.groundState` | What should be true afterwards; graders compare outcomes against it. |
 | Crossed trials and seeds | `measure()` | Sync or async adapters; external provider seeds cannot be enforced remotely. |
 | Transcript and actual outcome | `Step`, `Transcript`, `Outcome` | Instrumentation must observe all real tool effects. |
 | Threats | `TaskDistribution.threats` (closed enumeration with gold actions, expected mechanisms, consequence class, barrier); `Scenario.threat` | Prompt injection is a threat, not a special grader; one threat per scenario. |
-| Outcome column | One outcome grader per domain: `OutcomeGrade` with `deviation`, `attemptedDeviation` | Same grader for every threat; attempted from actions, occurred from state. |
+| Outcome column | One outcome grader per environment: `OutcomeGrade` with `deviation`, `attemptedDeviation` | Same grader for every threat; attempted from actions, occurred from state. |
 | Mechanism column | `gradeMechanisms()`: injection_followed, compaction_loss, hallucination, tool_fault_mishandled, mandate_attempt, misinterpretation | Fixed precedence; exactly one primary on a wrong outcome; misinterpretation is the residual. |
-| Deterministic graders | `Domain.grade`, identified by `GraderDefinition` | Default grades return values; payments grades ten threats. No LLM judge anywhere. |
+| Deterministic graders | `Environment.grade`, identified by `GraderDefinition` | Default grades return values; payments grades ten threats. No LLM judge anywhere. |
 | Judges | `rateTrials()` ratings, `interRaterReliability()`, `agreementWithGrader()` | Ratings are experimental evidence; their reliability is measured; they never define insured harms. |
 | Three columns | Outcome, event and process types and reports | No combined score. |
 | Rulers and experiments | `Ruler`, `DEFAULT_RULERS`, `runExperiment()`, `evaluate()` | Comparisons in experiments are exploratory unless predeclared. |
-| Two trivial controls | Every `Domain` declares them; the runner adds them | Default: never/always escalate; payments: always pay/always escalate. Controls share the measurement's environment. |
+| Two trivial controls | Every `Environment` declares them; the runner adds them | Default: never/always escalate; payments: always pay/always escalate. Controls share the measurement's environment. |
 | Paired clustered comparisons | Scenario differences, top-cluster bootstrap | Independent exchangeable top clusters are an assumption. |
 | Intervals and zero events | 95% intervals, bounded guards, plain-language zero note | Conservative small-cluster bounds; unavailable means are explicit. |
 | Currency non-inferiority | Predeclared margins, strict lower-bound decision | Constant unbounded losses cannot establish NI. |
@@ -39,7 +39,7 @@ explorer, terminal view and local API. No framework dependency is included.
 | Pre/post report | Same scenarios/seeds, bound plan, paired results and both certificates | Different IDs are called different functions. |
 | Generated limitations | Distribution/period/suite/severity/provider-update facts | A provider version change invalidates the measurement. |
 | Numerics | `src/statistics/`: seeded xoshiro RNG, distributions, Cholesky | Hand-rolled and tested in-repo; no numeric library to trust. |
-| Framework and domain neutrality | Callable, `TraceRecorder`, `Domain` protocol | No framework-specific dependency or automatic tracing adapter; the core has no notion of documents or payments. |
+| Framework and environment neutrality | Callable, `TraceRecorder`, `Environment` protocol | No runtime dependency; `signal-sdk/langchain` is a dependency-free bridge (tool descriptors and a callback object). The core has no notion of documents or payments. |
 
 A release artifact is not an underwriting approval. No real model was measured as
 part of the included demonstrations.

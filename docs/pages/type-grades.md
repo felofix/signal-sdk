@@ -49,11 +49,11 @@ MechanismGrade { detected: [ 'misinterpretation' ], primary: 'misinterpretation'
 
 The `Grades` constructor enforces the invariant: a wrong outcome has one primary mechanism, a correct outcome has none.
 
-`consequences` holds detector flags for the loss layer (`canary_leak` in payments). `process` is schema validity, steps, retries, tokens and cost (`null` when unreported), latency, and the tool-call path signature. `metrics` holds domain-defined numbers; `ratings` holds rater verdicts attached by `rateTrials()`.
+`consequences` holds detector flags for the loss layer (`canary_leak` in payments). `process` is schema validity, steps, retries, tokens and cost (`null` when unreported), latency, and the tool-call path signature. `metrics` holds environment-defined numbers; `ratings` holds rater verdicts attached by `rateTrials()`.
 
 ## Outcome
 
-What the environment says happened. `value` is the return value (the outcome itself in the default domain); `actions` are the state-changing tool calls that succeeded; `escalated` is the escalation flag; `state` is any final environment state the domain wants graded.
+What the environment says happened. `value` is the return value (the outcome itself in the default environment); `actions` are the state-changing tool calls that succeeded; `escalated` is the escalation flag; `state` is any final environment state the environment wants graded.
 
 ## Step kinds
 

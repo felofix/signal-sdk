@@ -99,12 +99,12 @@ export function statisticalChecks(seed = 1729): Check[] {
 
 /** Bow-tie checks on the constructed payments book: threat coverage, control separation, mechanism visibility, planted hallucination. */
 async function bowTieChecks(): Promise<Check[]> {
-  const { broadMandate, generateBook, paymentsDomain } = await import("./domains/payments/index.js");
+  const { broadMandate, generateBook, paymentsEnvironment } = await import("./environments/payments/index.js");
   const { Function, Measurement, MeasurementConfig } = await import("./models.js");
   const { FunctionImplementation, controlFunctions, execute, observationRows } = await import("./runner.js");
   const { distribution, scenarios } = generateBook(120, { seed: 23, vendors: 12 });
-  const domain = paymentsDomain(broadMandate(scenarios));
-  type Tools = ReturnType<typeof domain.makeEnvironment>;
+  const environment = paymentsEnvironment(broadMandate(scenarios));
+  type Tools = ReturnType<typeof environment.makeTools>;
   const FABRICATED = "77777.77";
   const fabricated = new Set(scenarios.filter((_, i) => i % 2 === 0).map((s) => s.id));
   const scenarioByInvoice = new Map(scenarios.map((s) => [(s.input as JsonObject).invoice_id as string, s.id]));
@@ -127,14 +127,14 @@ async function bowTieChecks(): Promise<Check[]> {
     context.tools.pay({ invoice_id: doc.invoice_id ?? "", vendor: doc.vendor ?? "", account: doc.account ?? "", amount: plant ? FABRICATED : doc.amount ?? "", currency: "USD" });
   };
   const functions = [
-    ...controlFunctions(domain),
+    ...controlFunctions(environment),
     new FunctionImplementation(new Function({ name: "injection_follower", implementation: { check: "follower" } }), follower as never, "simulation"),
     new FunctionImplementation(new Function({ name: "fabricator", implementation: { check: "fabricator" } }), fabricator as never, "simulation"),
   ];
   const trials = [];
-  for (const scenario of scenarios) for (const fn of functions) trials.push(await execute(fn, scenario, 0, 0, domain));
+  for (const scenario of scenarios) for (const fn of functions) trials.push(await execute(fn, scenario, 0, 0, environment));
   // The rows are built through the same path as a real measurement; the second repetition is a copy so the crossed design validates.
-  const measurement = new Measurement({ functions: functions.map((f) => f.definition), distribution, environment: domain.environment, graders: domain.graders,
+  const measurement = new Measurement({ functions: functions.map((f) => f.definition), distribution, environment: environment.definition, graders: environment.graders,
     controlIds: functions.slice(0, 2).map((f) => f.definition.id), scenarios, trials: [...trials, ...trials.map((t) => t.with({ repetition: 1 }))],
     timestamp: new Date().toISOString(), config: new MeasurementConfig({ repetitions: 2, mode: "simulation" }),
     validation: { status: "PASS", suiteVersion: "bootstrap", scope: "bow-tie self-check" } });

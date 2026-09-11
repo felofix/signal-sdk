@@ -4,9 +4,9 @@ group: Get started
 summary: What Signal measures, in one screen.
 ---
 
-Signal is a statistical measuring instrument for agent systems. You give it a **function** (the thing under test), a **book** of scenarios (constructed test examples, each with a threat class and a ground state), and a **domain** (the external world: tools, enforcement, graders). It runs every function on every scenario several times, grades each trial deterministically, and reads **rulers** off the results: accuracy with a 95% interval, pass^k, cost, deviation rates, agreement between raters.
+Signal is a statistical measuring instrument for agent systems. You give it a **function** (the thing under test), a **book** of scenarios (constructed test examples, each with a threat class and a ground state), and a **environment** (the external world: tools, enforcement, graders). It runs every function on every scenario several times, grades each trial deterministically, and reads **rulers** off the results: accuracy with a 95% interval, pass^k, cost, deviation rates, agreement between raters.
 
-Nothing about a task domain lives in the core. Documents, payments, tool schemas and threat definitions are supplied by a `Domain`. The built-in one grades plain return values, so any callable — sync or async — is measurable in a few lines. The whole SDK is TypeScript for Node 20+ with no runtime dependencies; the statistics are implemented and tested in-repo.
+Nothing about an environment lives in the core. Documents, payments, tool schemas and threat definitions are supplied by an `Environment`. The built-in one grades plain return values, so any callable — sync or async — is measurable in a few lines. The whole SDK is TypeScript for Node 20+ with no runtime dependencies; the statistics are implemented and tested in-repo.
 
 ## Example
 

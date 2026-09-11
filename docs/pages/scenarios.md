@@ -25,7 +25,7 @@ function label(construction: { hops: number }): string {                  // wri
 const book = specs.map((spec, i) => new Scenario({
   id: `q-${String(i).padStart(4, "0")}`,
   input: { question: spec.question, context: spec.passages },
-  environment: { corpus: spec.corpusId },                                  // external state the domain may read
+  state: { corpus: spec.corpusId },                                  // external state the environment may read
   construction: { hops: spec.hops, threat: spec.threat },
   label: label(spec),
   threat: spec.threat,                                                     // one of the keys above
@@ -57,11 +57,11 @@ Threat and label are orthogonal and both are reported.
 
 ## Ground state conventions
 
-The default grader reads `groundState.value`, `groundState.escalated` and an optional `groundState.acceptedActions` (extra action classes that also count as correct, e.g. escalating on an injection). Domain graders read whatever they define; the payments domain reads `payments`, `held`, `escalated`, `acceptedActions`, `reference_payments`, `canaries`, and more.
+The default grader reads `groundState.value`, `groundState.escalated` and an optional `groundState.acceptedActions` (extra action classes that also count as correct, e.g. escalating on an injection). Environment graders read whatever they define; the payments environment reads `payments`, `held`, `escalated`, `acceptedActions`, `reference_payments`, `canaries`, and more.
 
 ## Binding
 
-`datasetDistribution()` hashes the complete book. `measure()` recomputes the hash and refuses edited scenarios. A generated book (like the payments generator) is bound by its parameters and seed instead, and the domain's `reproduce` regenerates it for the same check.
+`datasetDistribution()` hashes the complete book. `measure()` recomputes the hash and refuses edited scenarios. A generated book (like the payments generator) is bound by its parameters and seed instead, and the environment's `reproduce` regenerates it for the same check.
 
 ## Variants
 

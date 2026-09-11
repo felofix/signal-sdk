@@ -1,24 +1,24 @@
 ---
-title: Writing a domain
+title: Writing an environment
 group: Guides
 summary: Environment, outcome grader, mechanisms and controls for a new kind of task.
 ---
 
-A `Domain` is everything external to the function: what it can call, what gets enforced, how a trial is graded, and the two trivial controls that any sane grader must separate. The default `RETURN_VALUES` domain covers pure callables; write your own when the function uses tools.
+An `Environment` is everything external to the function: what it can call, what gets enforced, how a trial is graded, and the two trivial controls that any sane grader must separate. The default `RETURN_VALUES` environment covers pure callables; write your own when the function uses tools.
 
 ## Example
 
 ```ts
-import { Action, Domain, EnvironmentDefinition, GraderDefinition, Grades, Outcome, OutcomeGrade, type Environment, type Scenario,
+import { Action, Environment, EnvironmentDefinition, GraderDefinition, Grades, Outcome, OutcomeGrade, type Tools, type Scenario,
          type TraceRecorder, type Transcript, fieldF1, gradeMechanisms, processGrade } from "signal-sdk";
 
-class SearchEnvironment implements Environment {
+class SearchTools implements Tools {
   private sent: Action[] = [];
   private escalated = false;
   readonly input: { question: string };
 
   constructor(scenario: Scenario, readonly seed: number, readonly trace: TraceRecorder,
-              private corpus = scenario.environment.corpus as Record<string, string>) {
+              private corpus = scenario.state.corpus as Record<string, string>) {
     this.input = scenario.input as { question: string };
   }
 
@@ -71,11 +71,11 @@ function grade(scenario: Scenario, transcript: Transcript, outcome: Outcome): Gr
   });
 }
 
-export const SEARCH = new Domain<SearchEnvironment>({
-  environment: new EnvironmentDefinition({ name: "search-and-send", implementation: { version: "1" },
+export const SEARCH = new Environment<SearchTools>({
+  definition: new EnvironmentDefinition({ name: "search-and-send", implementation: { version: "1" },
     toolDescriptions: { search: "Find passages", send: "Email a colleague", escalate: "Hand off" }, mandate: { sendDomain: "example.com" } }),
   graders: new GraderDefinition({ name: "search", version: "1", components: { outcome: "value equality", mechanism: "core mechanisms", consequences: ["external_send"] } }),
-  makeEnvironment: (scenario, seed, trace) => new SearchEnvironment(scenario, seed, trace),
+  makeTools: (scenario, seed, trace) => new SearchTools(scenario, seed, trace),
   grade,
   controls: [["silent", () => null], ["always_escalate", (ctx) => ctx.tools.escalate()]],
 });
@@ -83,22 +83,22 @@ export const SEARCH = new Domain<SearchEnvironment>({
 
 ## Rules for graders
 
-Pure and deterministic: no network, no randomness, no language model. There is **one** outcome grader per domain and it is the same for every threat: an injection scenario is graded by whether the final state matches its ground state, not by a special injection grader. The threat tells the report where to aggregate; it does not change what correct means.
+Pure and deterministic: no network, no randomness, no language model. There is **one** outcome grader per environment and it is the same for every threat: an injection scenario is graded by whether the final state matches its ground state, not by a special injection grader. The threat tells the report where to aggregate; it does not change what correct means.
 
 Mechanisms come from `gradeMechanisms()`: tell it which tools mutate the world and which argument fields need provenance, and it applies the closed enumeration and the precedence rule. Anything a judge thinks belongs in `ratings`, attached later with `rateTrials()`.
 
-## What the environment must do
+## What the tools must do
 
 - Route every tool call through `trace.recordTool()`. Schema errors are recorded, never swallowed.
 - Mark calls that change the world with `stateChanging: true`; `recordSignal()` refuses to run after one.
 - Return `{ ok: false, mandateDenied: true }` from a tool the mandate refuses; that is what the `mandate_attempt` mechanism reads.
-- Return an `Outcome` from `finish(returned)` built from what the tools did. In the default domain the returned value *is* the outcome; in a tool domain it is evidence at most.
+- Return an `Outcome` from `finish(returned)` built from what the tools did. In the default environment the returned value *is* the outcome; in a tool environment it is evidence at most.
 - Expose `trace` so the runner can read the transcript.
 
 ## Controls
 
 Two trivial functions that always run alongside yours. Their job is to prove the graders can tell doing something from doing nothing. `measure()` adds them and marks their IDs in `Measurement.controlIds`; the self-validation gate checks that they produce different outcome-correct rates on every threat whose gold does not accept both of their actions.
 
-## The payments domain
+## The payments environment
 
-`signal-sdk/domains/payments` is a complete worked domain: seven tools, a `Mandate` enforced in `pay()`, ten threats, a single outcome grader, the core mechanisms, a canary-leak consequence detector, a reproducible generator. Read it as the reference implementation. See [Payments domain](#/payments).
+`signal-sdk/environments/payments` is a complete worked environment: seven tools, a `Mandate` enforced in `pay()`, ten threats, a single outcome grader, the core mechanisms, a canary-leak consequence detector, a reproducible generator. Read it as the reference implementation. See [Payments environment](#/payments).

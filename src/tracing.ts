@@ -1,4 +1,4 @@
-/** Domain-neutral recording of what happened during one trial. */
+/** Environment-neutral recording of what happened during one trial. */
 
 import { performance } from "node:perf_hooks";
 import { type Json, type JsonObject, Message, Step, Transcript, ValidationError, clone, plain } from "./models.js";

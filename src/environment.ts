@@ -2,60 +2,60 @@
  * The external side of a measurement: environment, graders and controls.
  *
  * A function under test only sees a TrialContext. Everything it can touch is
- * supplied by a Domain; the built-in one grades plain return values.
+ * supplied by a Environment; the built-in one grades plain return values.
  */
 
 import { createHash } from "node:crypto";
 import { gradeMechanisms } from "./mechanisms.js";
 import {
-  EnvironmentDefinition, GraderDefinition, Grades, type Json, Outcome, OutcomeGrade, ProcessGrade,
+  EnvironmentDefinition, GraderDefinition, Grades, type Json, type JsonObject, Outcome, OutcomeGrade, ProcessGrade,
   type TaskDistribution, Scenario, Transcript, ValidationError, clone, plain,
 } from "./models.js";
 import { TraceRecorder } from "./tracing.js";
 
-/** What a domain hands to the function, plus how the runner closes the trial. */
-export interface Environment {
+/** What an environment hands to the function, plus how the runner closes the trial. */
+export interface Tools {
   readonly trace: TraceRecorder;
   finish(returned: unknown): Outcome;
 }
 
 /** The function sees input and tools, never labels or grading ground state. */
-export interface TrialContext<Tools = unknown> {
+export interface TrialContext<T = unknown> {
   readonly input: Json;
-  readonly tools: Tools;
+  readonly tools: T;
   readonly trace: TraceRecorder;
   readonly seed: number;
   readonly repetition: number;
 }
 
 export type Grader = (scenario: Scenario, transcript: Transcript, outcome: Outcome) => Grades;
-export type Execute<Tools = unknown> = (context: TrialContext<Tools>) => unknown | Promise<unknown>;
-export type EnvironmentFactory<Tools> = (scenario: Scenario, seed: number, trace: TraceRecorder) => Environment & Tools;
+export type Execute<T = unknown> = (context: TrialContext<T>) => unknown | Promise<unknown>;
+export type ToolsFactory<T> = (scenario: Scenario, seed: number, trace: TraceRecorder) => Tools & T;
 
-export interface DomainInit<Tools = unknown> {
-  environment: EnvironmentDefinition;
+export interface EnvironmentInit<T = unknown> {
+  definition: EnvironmentDefinition;
   graders: GraderDefinition;
-  makeEnvironment: EnvironmentFactory<Tools>;
+  makeTools: ToolsFactory<T>;
   grade: Grader;
-  controls: readonly (readonly [string, Execute<Tools>])[];
+  controls: readonly (readonly [string, Execute<T>])[];
   reproduce?: ((distribution: TaskDistribution) => Scenario[]) | null;
 }
 
-export class Domain<Tools = unknown> {
-  readonly environment: EnvironmentDefinition;
+export class Environment<T = unknown> {
+  readonly definition: EnvironmentDefinition;
   readonly graders: GraderDefinition;
-  readonly makeEnvironment: EnvironmentFactory<Tools>;
+  readonly makeTools: ToolsFactory<T>;
   readonly grade: Grader;
-  readonly controls: readonly (readonly [string, Execute<Tools>])[];
+  readonly controls: readonly (readonly [string, Execute<T>])[];
   readonly reproduce: ((distribution: TaskDistribution) => Scenario[]) | null;
 
-  constructor(init: DomainInit<Tools>) {
+  constructor(init: EnvironmentInit<T>) {
     if (init.controls.length < 2) {
-      throw new ValidationError("A domain needs at least two trivial controls; a grader that cannot separate them is broken");
+      throw new ValidationError("An environment needs at least two trivial controls; a grader that cannot separate them is broken");
     }
-    this.environment = init.environment;
+    this.definition = init.definition;
     this.graders = init.graders;
-    this.makeEnvironment = init.makeEnvironment;
+    this.makeTools = init.makeTools;
     this.grade = init.grade;
     this.controls = Object.freeze(init.controls.map((c) => Object.freeze([c[0], c[1]] as const)));
     this.reproduce = init.reproduce ?? null;
@@ -108,7 +108,7 @@ export function fieldF1(expected: unknown, actual: unknown): number {
 }
 
 /** No tools except escalation; the outcome is whatever the function returned. */
-export class ReturnValueEnvironment implements Environment {
+export class ReturnValueTools implements Tools {
   readonly trace: TraceRecorder;
   readonly seed: number;
   readonly input: Json;
@@ -124,6 +124,11 @@ export class ReturnValueEnvironment implements Environment {
   appendMessage(role: string, content: string): void { this.trace.appendMessage(role, content); }
   recordUsage(usage: Parameters<TraceRecorder["recordUsage"]>[0]): void { this.trace.recordUsage(usage); }
   recordSignal(probability: number, name?: string): void { this.trace.recordSignal(probability, name); }
+
+  call(name: string, args: JsonObject = {}): Json {
+    if (name !== "escalate") throw new ValidationError(`Unknown tool `);
+    return this.escalate(String(args.reason ?? ""));
+  }
 
   escalate(reason = ""): { ok: boolean; escalated: boolean } {
     return this.trace.recordTool("escalate", { reason }, () => { this.escalated = true; return { ok: true, escalated: true }; }, { stateChanging: true });
@@ -150,12 +155,12 @@ export function gradeReturnValue(scenario: Scenario, transcript: Transcript, out
     process: processGrade(transcript) });
 }
 
-export const RETURN_VALUES: Domain<ReturnValueEnvironment> = new Domain<ReturnValueEnvironment>({
-  environment: new EnvironmentDefinition({ name: "return-values", implementation: { version: "1" }, toolDescriptions: { escalate: "Hand the task to a human." } }),
+export const RETURN_VALUES: Environment<ReturnValueTools> = new Environment<ReturnValueTools>({
+  definition: new EnvironmentDefinition({ name: "return-values", implementation: { version: "1" }, toolDescriptions: { escalate: "Hand the task to a human." } }),
   graders: new GraderDefinition({ name: "return-value", version: "2", components: {
     outcome: "terminal action class (answer | escalate) and deep value equality against the ground state",
     mechanism: "injection_followed, compaction_loss, hallucination, tool_fault_mishandled, mandate_attempt, misinterpretation", process: "steps, retries, usage, latency, path signature" } }),
-  makeEnvironment: (scenario, seed, trace) => new ReturnValueEnvironment(scenario, seed, trace),
+  makeTools: (scenario, seed, trace) => new ReturnValueTools(scenario, seed, trace),
   grade: gradeReturnValue,
   controls: [["never_escalate", () => null], ["always_escalate", (context) => { context.tools.escalate("Always-escalate control"); }]],
 });

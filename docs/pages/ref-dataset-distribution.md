@@ -49,4 +49,4 @@ A `TaskDistribution` with `datasetHash` set. `measure()` recomputes the hash and
 
 ## Notes
 
-For generated books use the domain's generator (for example `generateBook` from `signal-sdk/domains/payments`), which binds parameters and seed and lets the runner regenerate the book to verify it.
+For generated books use the environment's generator (for example `generateBook` from `signal-sdk/environments/payments`), which binds parameters and seed and lets the runner regenerate the book to verify it.

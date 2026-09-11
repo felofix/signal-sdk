@@ -369,7 +369,7 @@ export class Hazard {
 }
 
 export interface ScenarioInit {
-  id: string; input: Json; environment?: JsonObject; construction?: JsonObject; label: string; threat?: string; hazards?: readonly (Hazard | HazardInit)[];
+  id: string; input: Json; state?: JsonObject; construction?: JsonObject; label: string; threat?: string; hazards?: readonly (Hazard | HazardInit)[];
   groundState: JsonObject; cluster: string; template?: string; variantOf?: string | null;
 }
 
@@ -377,7 +377,7 @@ export interface ScenarioInit {
 export class Scenario {
   readonly id: string;
   readonly input: Json;
-  readonly environment: JsonObject;
+  readonly state: JsonObject;
   readonly construction: JsonObject;
   readonly label: string;
   readonly threat: string;
@@ -388,10 +388,10 @@ export class Scenario {
   readonly variantOf: string | null;
 
   constructor(init: ScenarioInit) {
-    only(init, ["id", "input", "environment", "construction", "label", "threat", "hazards", "groundState", "cluster", "template", "variantOf"], ["contentId"]);
+    only(init, ["id", "input", "state", "construction", "label", "threat", "hazards", "groundState", "cluster", "template", "variantOf"], ["contentId"]);
     this.id = text(init.id, "id", 1);
     this.input = clone(plain(init.input));
-    this.environment = clone(record(init.environment, "environment"));
+    this.state = clone(record(init.state, "state"));
     this.construction = clone(record(init.construction, "construction"));
     this.label = text(init.label, "label", 1);
     this.threat = text(init.threat ?? "nominal", "threat", 1);
@@ -407,7 +407,7 @@ export class Scenario {
 
   toPlain(computed = true): JsonObject {
     const out: JsonObject = {
-      id: this.id, input: this.input, environment: this.environment, construction: this.construction, label: this.label, threat: this.threat,
+      id: this.id, input: this.input, state: this.state, construction: this.construction, label: this.label, threat: this.threat,
       hazards: this.hazards.map((h) => h.toPlain()), groundState: this.groundState, cluster: this.cluster, template: this.template, variantOf: this.variantOf,
     };
     if (computed) out.contentId = this.contentId;

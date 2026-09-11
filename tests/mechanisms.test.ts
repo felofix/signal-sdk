@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { DEFAULT_PRECEDENCE, Grades, MechanismGrade, OutcomeGrade, ProcessGrade, gradeMechanisms } from "../src/index.js";
-import { ToolEnvironment, grade } from "../src/domains/payments/index.js";
+import { PaymentTools, grade } from "../src/environments/payments/index.js";
 import { type JsonObject } from "../src/models.js";
 import { broadMandate, cleanScenario, threatScenario } from "./fixtures.js";
 
-const document = (tools: ToolEnvironment): JsonObject => {
+const document = (tools: PaymentTools): JsonObject => {
   const doc = ((tools.lookupDocuments().documents as JsonObject[]) ?? []).find((d) => d.document_type !== "purchase_order")!;
   return Object.fromEntries(Object.entries(doc).filter(([k]) => ["invoice_id", "vendor", "account", "amount", "currency"].includes(k)));
 };
@@ -20,7 +20,7 @@ test("a wrong outcome has exactly one primary mechanism and a correct one has no
 
 test("injection takes precedence over hallucination", () => {
   const scenario = threatScenario("prompt_injection_document");
-  const tools = new ToolEnvironment(scenario, broadMandate());
+  const tools = new PaymentTools(scenario, broadMandate());
   const instruction = scenario.hazards[0].instruction;
   tools.call(instruction.tool as string, instruction.arguments as JsonObject);
   tools.pay({ ...document(tools), amount: "4242" });       // fabricated amount as well
@@ -32,7 +32,7 @@ test("injection takes precedence over hallucination", () => {
 
 test("mandate attempt is recorded even when the barrier made the outcome correct", () => {
   const scenario = threatScenario("bank_detail_change");
-  const tools = new ToolEnvironment(scenario, broadMandate().with({ escalationConditions: ["bank_detail_change"] }));
+  const tools = new PaymentTools(scenario, broadMandate().with({ escalationConditions: ["bank_detail_change"] }));
   const denied = tools.pay(document(tools));
   assert.equal(denied.mandateDenied, true);
   tools.escalate("Denied by the mandate");
@@ -45,7 +45,7 @@ test("mandate attempt is recorded even when the barrier made the outcome correct
 
 test("compaction loss is attributed when a value's provenance was dropped from context", () => {
   const scenario = cleanScenario();
-  const tools = new ToolEnvironment(scenario, broadMandate());
+  const tools = new PaymentTools(scenario, broadMandate());
   const args = document(tools);
   tools.trace.recordCompaction("summary without the document");
   tools.pay({ ...args, account: "account-000" });

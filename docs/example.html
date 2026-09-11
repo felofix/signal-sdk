@@ -186,8 +186,8 @@ footer a { color: var(--ink-80); }
       </div>
       <div class="concept">
         <p class="eyebrow">Outside, bound to the measurement</p>
-        <h3>Domain</h3>
-        <p>Environment, tools, mandate and graders. The core has no notion of documents or payments; the default domain grades plain return values, the optional payments domain enforces a mandate in the tool layer.</p>
+        <h3>Environment</h3>
+        <p>Environment, tools, mandate and graders. The core has no notion of documents or payments; the default environment grades plain return values, the optional payments environment enforces a mandate in the tool layer.</p>
       </div>
       <div class="concept">
         <p class="eyebrow">Unit of statistics</p>
@@ -221,7 +221,7 @@ footer a { color: var(--ink-80); }
   labelRule: <span class="s">"impossible if an operand is missing; otherwise easy"</span> });
 
 <span class="c">// the function: what it is, not what it can touch</span>
-<span class="k">function</span> <span class="f">add</span>(context: TrialContext&lt;ReturnValueEnvironment&gt;): number | <span class="k">null</span> {
+<span class="k">function</span> <span class="f">add</span>(context: TrialContext&lt;ReturnValueTools&gt;): number | <span class="k">null</span> {
   <span class="k">const</span> task = (context.input <span class="k">as</span> { task: string }).task;
   <span class="k">if</span> (task.includes(<span class="s">"+ ?"</span>)) { context.tools.escalate(<span class="s">"Missing operand"</span>); <span class="k">return</span> <span class="k">null</span>; }
   <span class="k">const</span> [a, b] = task.replace(<span class="s">"What is "</span>, <span class="s">""</span>).replace(<span class="s">"?"</span>, <span class="s">""</span>).split(<span class="s">" + "</span>);
@@ -236,7 +236,7 @@ footer a { color: var(--ink-80); }
       <div class="steps">
         <div class="step"><span class="n">1</span><div><h3>The gate runs first</h3><p>Before a single trial, eight seeded simulation checks must pass: interval coverage, rejection of a planted worse function, zero-events-is-not-zero-risk, planted difficulty recovered, controls separated. The evidence is bound into the snapshot.</p></div></div>
         <div class="step"><span class="n">2</span><div><h3>Three functions cross 24 scenarios, 3 times</h3><p><code>add</code>, <code>never_escalate</code> and <code>always_escalate</code> each see the same 24 inputs with the same seeds: 216 trials. Repetitions measure stability; they never count as extra scenarios.</p></div></div>
-        <div class="step"><span class="n">3</span><div><h3>Outcome is what came back, not what was said</h3><p>The default domain's outcome <em>is</em> the return value. In tool-using domains the environment records what actually happened; a function that says it paid without paying is graded on the ledger.</p></div></div>
+        <div class="step"><span class="n">3</span><div><h3>Outcome is what came back, not what was said</h3><p>The default environment's outcome <em>is</em> the return value. In tool-using environments the environment records what actually happened; a function that says it paid without paying is graded on the ledger.</p></div></div>
         <div class="step"><span class="n">4</span><div><h3>One immutable snapshot, one certificate per function</h3><p>The measurement is content-addressed. Certificates carry the identity hashes, the three columns, difficulty, consistency, loss assumptions, and a limitations section generated from the configuration.</p></div></div>
       </div>
     </div>
@@ -309,7 +309,7 @@ footer a { color: var(--ink-80); }
       <div>
         <p class="eyebrow">Attempted vs. occurred, per threat</p>
         <h2>The same instrument on an agent that moves money.</h2>
-        <p>The optional payments domain adds tools, a closed enumeration of ten threats, and a mandate enforced in <code>pay()</code>. Column one is the outcome: did the final state match the ground state? Column two is the mechanism: why not. On the <code>duplicate</code> threat the reference policy tried to pay every time and the mandate refused every time: attempted 1.0, occurred 0.0. That gap is the barrier.</p>
+        <p>The optional payments environment adds tools, a closed enumeration of ten threats, and a mandate enforced in <code>pay()</code>. Column one is the outcome: did the final state match the ground state? Column two is the mechanism: why not. On the <code>duplicate</code> threat the reference policy tried to pay every time and the mandate refused every time: attempted 1.0, occurred 0.0. That gap is the barrier.</p>
       </div>
     </div>
     <div class="table-scroll">

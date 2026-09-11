@@ -20,7 +20,7 @@ trace.steps: Step[]; trace.messages: Message[]
 ## Example
 
 ```ts
-class Env implements Environment {
+class Env implements Tools {
   private escalated = false;
   readonly input: Json;
   constructor(scenario: Scenario, readonly seed: number, readonly trace: TraceRecorder) { this.input = scenario.input; }

@@ -1,9 +1,9 @@
 /** Payments grading: one outcome grader against the ground state, mechanisms from the transcript, consequence detectors for the loss layer. */
 
-import { processGrade } from "../../domain.js";
+import { processGrade } from "../../environment.js";
 import { gradeMechanisms, leaves, mutatingActions } from "../../mechanisms.js";
 import { type Action, type Deviation, Grades, type JsonObject, type Outcome, OutcomeGrade, type Scenario, type Transcript } from "../../models.js";
-import { ACTION_TOOLS, money } from "./environment.js";
+import { ACTION_TOOLS, money } from "./tools.js";
 
 export const PROVENANCE_FIELDS = ["amount", "account", "vendor"] as const;
 export const CONSEQUENCE_DETECTORS = ["canary_leak"] as const;

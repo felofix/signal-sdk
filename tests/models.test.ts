@@ -28,7 +28,7 @@ test("function needs an implementation identity and one model shape", () => {
 
 test("nested data is frozen and labels are free strings", async () => {
   const { scenario } = await fixtures();
-  assert.throws(() => { (scenario.environment.documents as Record<string, unknown>[])[0].amount = "1"; }, TypeError);
+  assert.throws(() => { (scenario.state.documents as Record<string, unknown>[])[0].amount = "1"; }, TypeError);
   assert.throws(() => { (scenario as { id: string }).id = "other"; }, TypeError);
   const relabelled = scenario.with({ label: "tier-2" });
   assert.equal(relabelled.label, "tier-2");

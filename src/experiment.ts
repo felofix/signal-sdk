@@ -5,7 +5,7 @@
  * Comparisons here are exploratory unless you predeclare them in the config.
  */
 
-import { type Domain, RETURN_VALUES } from "./domain.js";
+import { type Environment, RETURN_VALUES } from "./environment.js";
 import { type Json, Measurement, MeasurementConfig, type TaskDistribution, Scenario, Trial, ValidationError, type ValidityPeriod, plain } from "./models.js";
 import { DEFAULT_RULERS, type Ruler, type RulerResult, applyRulers } from "./rulers.js";
 import { FunctionImplementation, measure, observationRows } from "./runner.js";
@@ -64,16 +64,16 @@ function cell(value: { estimate?: number | null; interval?: [number | null, numb
   return `${value.estimate.toFixed(3)} [${low.toFixed(3)}, ${high.toFixed(3)}]`;
 }
 
-export interface ExperimentOptions<Tools> {
-  domain?: Domain<Tools>; rulers?: readonly Ruler[]; repetitions?: number; seed?: number; mode?: "simulation" | "real";
+export interface ExperimentOptions<T> {
+  environment?: Environment<T>; rulers?: readonly Ruler[]; repetitions?: number; seed?: number; mode?: "simulation" | "real";
   config?: MeasurementConfig | null; validity?: ValidityPeriod | null; baseline?: string | null; onTrial?: (trial: Trial) => void;
 }
 
 /** Cross every function with the book, then read every ruler off the rows. */
-export async function runExperiment<Tools = unknown>(name: string, functions: readonly FunctionImplementation<Tools>[], distribution: TaskDistribution,
-  scenarios: readonly Scenario[], options: ExperimentOptions<Tools> = {}): Promise<Experiment> {
+export async function runExperiment<T = unknown>(name: string, functions: readonly FunctionImplementation<T>[], distribution: TaskDistribution,
+  scenarios: readonly Scenario[], options: ExperimentOptions<T> = {}): Promise<Experiment> {
   const config = options.config ?? new MeasurementConfig({ mode: options.mode ?? "simulation", repetitions: options.repetitions ?? 3, seed: options.seed ?? 0 });
-  const measurement = await measure(functions, distribution, scenarios, { domain: options.domain ?? (RETURN_VALUES as unknown as Domain<Tools>), config,
+  const measurement = await measure(functions, distribution, scenarios, { environment: options.environment ?? (RETURN_VALUES as unknown as Environment<T>), config,
     validity: options.validity ?? null, onTrial: options.onTrial });
   return evaluate(name, measurement, options.rulers ?? DEFAULT_RULERS, { baseline: options.baseline ?? null });
 }

@@ -12,7 +12,7 @@ measure(
   distribution: TaskDistribution,
   scenarios: Scenario[],
   options?: {
-    domain?: Domain;                       // default RETURN_VALUES
+    environment?: Environment;                       // default RETURN_VALUES
     config?: MeasurementConfig;            // default new MeasurementConfig({ mode: "real" })
     validity?: ValidityPeriod | null;
     onTrial?: (trial: Trial) => void;
@@ -20,23 +20,23 @@ measure(
 ): Promise<Measurement>
 ```
 
-Runs the self-validation gate, verifies the book against its distribution, adds the domain's two controls, then executes every function on every scenario for `config.repetitions` repetitions with seeds shared across functions. Functions may be sync or async.
+Runs the self-validation gate, verifies the book against its distribution, adds the environment's two controls, then executes every function on every scenario for `config.repetitions` repetitions with seeds shared across functions. Functions may be sync or async.
 
 ## Example
 
 ```ts
 import { Function, FunctionImplementation, MeasurementConfig, measure } from "signal-sdk";
-import { Mandate, generateBook, paymentsDomain } from "signal-sdk/domains/payments";
+import { Mandate, generateBook, paymentsEnvironment } from "signal-sdk/environments/payments";
 
 const { distribution, scenarios } = generateBook(48, { seed: 7, vendors: 16, variants: true });
-const domain = paymentsDomain(new Mandate({ amountCap: 1500, allowedVendors, allowedAccounts,
+const environment = paymentsEnvironment(new Mandate({ amountCap: 1500, allowedVendors, allowedAccounts,
   escalationConditions: ["duplicate", "bank_detail_change"] }));
 
 const measurement = await measure(
   [new FunctionImplementation(new Function({ name: "reconcile", implementation: { revision: "9f3c1e2" } }), reconcile, "simulation")],
   distribution, scenarios,
   {
-    domain,
+    environment,
     config: new MeasurementConfig({ mode: "simulation", repetitions: 3, seed: 7,
       severityAssumptions: { wrong_account: { distribution: "fixed", amount: 100, currency: "USD" } } }),
     onTrial: (trial) => console.log(trial.scenarioId, trial.grades.outcome.correct),
@@ -51,7 +51,7 @@ const measurement = await measure(
 | `functions` | `FunctionImplementation[]` | required | Distinct function identities to measure. Do not include controls. |
 | `distribution` | `TaskDistribution` | required | The book's binding: dataset hash or generator parameters. |
 | `scenarios` | `Scenario[]` | required | The book. Must reproduce or hash to the distribution. |
-| `options.domain` | `Domain` | `RETURN_VALUES` | Environment, graders and controls. |
+| `options.environment` | `Environment` | `RETURN_VALUES` | Environment, graders and controls. |
 | `options.config` | `MeasurementConfig` | `{ mode: "real" }` | Repetitions, seed, bootstrap and loss settings, comparisons. |
 | `options.validity` | `ValidityPeriod` | `null` | Period the measurement is valid for; the timestamp must fall inside it. |
 | `options.onTrial` | `(trial) => void` | — | Called with each completed trial, for progress or streaming storage. |

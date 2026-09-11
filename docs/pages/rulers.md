@@ -18,7 +18,7 @@ const rulers = [
   rate("attempts:deviation"),          // attempted-deviation rate, read from emitted actions
   rate("occurrences:deviation"),       // occurred-deviation rate, read from the final state
   rate("attempts:mandate_attempt"),    // how often the barrier had to act
-  rate("metric:searches", { higherIsBetter: false }),   // a domain metric
+  rate("metric:searches", { higherIsBetter: false }),   // an environment metric
   passPowerK(),                        // all repetitions correct
   pathConsistency(),                   // identical tool-call path across repetitions
   interRaterReliability(["grader", "llm_judge"]),

@@ -4,7 +4,7 @@ group: Get started
 summary: Measure a callable end to end and read the certificate.
 ---
 
-Four steps: build a book, identify the function, measure, report. The default domain has no tools except `escalate()`, and the outcome is whatever the function returns.
+Four steps: build a book, identify the function, measure, report. The default environment has no tools except `escalate()`, and the outcome is whatever the function returns.
 
 ## Example
 
@@ -61,7 +61,7 @@ console.log(measurement.id, measurement.trials.length, "trials");
 Use `kind: "real"` and `MeasurementConfig({ mode: "real" })`, and record actual usage from inside the function:
 
 ```ts
-async function run(context: TrialContext<ReturnValueEnvironment>) {
+async function run(context: TrialContext<ReturnValueTools>) {
   const started = performance.now();
   const response = await client.messages.create({ model: MODEL, max_tokens: 100, messages: [{ role: "user", content: (context.input as { task: string }).task }] });
   context.trace.recordUsage({ tokens: response.usage.input_tokens + response.usage.output_tokens, cost: null,

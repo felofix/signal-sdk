@@ -27,8 +27,8 @@ const config = new MeasurementConfig({ mode: "real", repetitions: 3, confirmator
 const plan = new ComparisonPlan({ declaredAt: new Date().toISOString(), comparisons: [
   new ConfirmatoryComparison({ name: "wrong-account", referenceId: before.id, candidateId: after.id, metric: "loss:wrong_account", margin: 1000, maximumSeverity: 5000 }),
 ] });
-const pre = await measure([beforeImpl], distribution, book, { domain, config: new MeasurementConfig({ prepostPlan: plan, mode: "simulation" }) });
-const post = await measure([afterImpl], distribution, book, { domain, config: new MeasurementConfig({ prepostPlan: plan, mode: "simulation" }) });
+const pre = await measure([beforeImpl], distribution, book, { environment, config: new MeasurementConfig({ prepostPlan: plan, mode: "simulation" }) });
+const post = await measure([afterImpl], distribution, book, { environment, config: new MeasurementConfig({ prepostPlan: plan, mode: "simulation" }) });
 const report = compareMeasurements(pre, post);
 console.log(report.pairedDifferences[0].comparisons[0].conclusion);   // non_inferior | not_established
 ```

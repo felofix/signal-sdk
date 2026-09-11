@@ -13,7 +13,7 @@ runExperiment(
   distribution: TaskDistribution,
   scenarios: Scenario[],
   options?: {
-    domain?: Domain;                      // default RETURN_VALUES
+    environment?: Environment;                      // default RETURN_VALUES
     rulers?: Ruler[];                     // default DEFAULT_RULERS
     repetitions?: number;                 // 3
     seed?: number;                        // 0

@@ -17,12 +17,13 @@
   "exports": {
     ".": "./dist/src/index.js",
     "./statistics": "./dist/src/statistics/index.js",
-    "./domains/payments": "./dist/src/domains/payments/index.js",
+    "./environments/payments": "./dist/src/environments/payments/index.js",
     "./certificate": "./dist/src/certificate.js",
     "./visualization": "./dist/src/visualization.js",
     "./dashboard": "./dist/src/dashboard/index.js",
     "./experiment": "./dist/src/experiment.js",
-    "./rulers": "./dist/src/rulers.js"
+    "./rulers": "./dist/src/rulers.js",
+    "./langchain": "./dist/src/langchain.js"
   },
   "bin": {
     "signal-sdk": "./dist/src/cli.js"
@@ -40,6 +41,7 @@
     "lint": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
+    "@langchain/core": "^1.2.10",
     "@types/node": "^22.20.2",
     "typescript": "^5.9.3"
   }

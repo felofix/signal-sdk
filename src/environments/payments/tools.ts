@@ -1,7 +1,7 @@
 /** A constructed payment environment with mandate enforcement at the tool boundary. */
 
 import { createHash } from "node:crypto";
-import type { Environment } from "../../domain.js";
+import type { Tools } from "../../environment.js";
 import { Action, type Json, type JsonObject, Outcome, type Scenario, ValidationError, clone } from "../../models.js";
 import { TraceRecorder } from "../../tracing.js";
 import type { Mandate } from "./models.js";
@@ -32,7 +32,7 @@ export function money(value: unknown): number | null {
  * Expose only observable state; retain every attempted tool call for grading.
  * An empty whitelist permits no payment.
  */
-export class ToolEnvironment implements Environment {
+export class PaymentTools implements Tools {
   readonly trace: TraceRecorder;
   readonly seed: number;
   private readonly scenario: Scenario;
@@ -45,7 +45,7 @@ export class ToolEnvironment implements Environment {
   constructor(scenario: Scenario, mandate: Mandate, seed = 0, trace?: TraceRecorder) {
     this.scenario = scenario;
     this._mandate = mandate;
-    this.state = clone(scenario.environment) as State;
+    this.state = clone(scenario.state) as State;
     this.state._mandate = mandate.toPlain();
     this.trace = trace ?? new TraceRecorder();
     this.seed = seed;
@@ -138,3 +138,8 @@ export class ToolEnvironment implements Environment {
   /** Payment outcomes come only from tools; returned claims have no effect. */
   finish(_returned: unknown): Outcome { return this.outcome(); }
 }
+
+/** JSON Schema per tool, for LangChain or any other schema-driven caller. */
+export const TOOL_SCHEMAS: Record<string, JsonObject> = Object.fromEntries(Object.entries(SCHEMAS).map(([name, [required, allowed]]) => [name, {
+  type: "object", properties: Object.fromEntries([...allowed].map((field) => [field, { type: "string" }])), required: [...required], additionalProperties: false,
+}]));

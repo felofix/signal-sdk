@@ -7,9 +7,9 @@ Repository: https://github.com/felofix/signal-sdk
 
 _Get started · What Signal measures, in one screen._
 
-Signal is a statistical measuring instrument for agent systems. You give it a **function** (the thing under test), a **book** of scenarios (constructed test examples, each with a threat class and a ground state), and a **domain** (the external world: tools, enforcement, graders). It runs every function on every scenario several times, grades each trial deterministically, and reads **rulers** off the results: accuracy with a 95% interval, pass^k, cost, deviation rates, agreement between raters.
+Signal is a statistical measuring instrument for agent systems. You give it a **function** (the thing under test), a **book** of scenarios (constructed test examples, each with a threat class and a ground state), and a **environment** (the external world: tools, enforcement, graders). It runs every function on every scenario several times, grades each trial deterministically, and reads **rulers** off the results: accuracy with a 95% interval, pass^k, cost, deviation rates, agreement between raters.
 
-Nothing about a task domain lives in the core. Documents, payments, tool schemas and threat definitions are supplied by a `Domain`. The built-in one grades plain return values, so any callable — sync or async — is measurable in a few lines. The whole SDK is TypeScript for Node 20+ with no runtime dependencies; the statistics are implemented and tested in-repo.
+Nothing about an environment lives in the core. Documents, payments, tool schemas and threat definitions are supplied by an `Environment`. The built-in one grades plain return values, so any callable — sync or async — is measurable in a few lines. The whole SDK is TypeScript for Node 20+ with no runtime dependencies; the statistics are implemented and tested in-repo.
 
 ## Example
 
@@ -104,7 +104,7 @@ npm install ../signal-sdk/signal-sdk-0.4.0.tgz    # in your project
 
 ```ts
 import { measure } from "signal-sdk";
-import { paymentsDomain } from "signal-sdk/domains/payments";
+import { paymentsEnvironment } from "signal-sdk/environments/payments";
 import { certificates } from "signal-sdk/certificate";
 import { summarize } from "signal-sdk/statistics";
 ```
@@ -122,7 +122,7 @@ import { summarize } from "signal-sdk/statistics";
 
 _Get started · Measure a callable end to end and read the certificate._
 
-Four steps: build a book, identify the function, measure, report. The default domain has no tools except `escalate()`, and the outcome is whatever the function returns.
+Four steps: build a book, identify the function, measure, report. The default environment has no tools except `escalate()`, and the outcome is whatever the function returns.
 
 ## Example
 
@@ -179,7 +179,7 @@ console.log(measurement.id, measurement.trials.length, "trials");
 Use `kind: "real"` and `MeasurementConfig({ mode: "real" })`, and record actual usage from inside the function:
 
 ```ts
-async function run(context: TrialContext<ReturnValueEnvironment>) {
+async function run(context: TrialContext<ReturnValueTools>) {
   const started = performance.now();
   const response = await client.messages.create({ model: MODEL, max_tokens: 100, messages: [{ role: "user", content: (context.input as { task: string }).task }] });
   context.trace.recordUsage({ tokens: response.usage.input_tokens + response.usage.output_tokens, cost: null,
@@ -267,10 +267,10 @@ Signal follows the bow-tie from process safety: threats on the left, a top event
 | Concept | Meaning |
 |---|---|
 | **Function** | The system under test and nothing else: `implementation`, pinned `model`/`models`, `prompts`, `configuration`. Its SHA-256 changes when any of them change. |
-| **Domain** | Everything external the function can touch, bundled: an `EnvironmentDefinition`, a `GraderDefinition`, an environment factory, the grader, two trivial controls. |
-| **Environment** | Tools, external state and enforcement for one trial. The function calls it; it records what actually happened. |
+| **Environment** | Everything external the function can touch, bundled: an `EnvironmentDefinition`, a `GraderDefinition`, a tools factory, the grader, two trivial controls. |
+| **Tools** | Tools, external state and enforcement for one trial. The function calls it; it records what actually happened. |
 | **Mandate** | Hard limits enforced in the environment's tool layer. A limit that exists only in a prompt is a wish. |
-| **Scenario** | One constructed test example: `input`, external `environment` state, `construction` parameters, a `label`, exactly one `threat`, injected `hazards`, a `groundState`, a `cluster`. The unit of all statistics. |
+| **Scenario** | One constructed test example: `input`, external `state`, `construction` parameters, a `label`, exactly one `threat`, injected `hazards`, a `groundState`, a `cluster`. The unit of all statistics. |
 | **Threat** | The scenario's class from a closed enumeration declared on the distribution (`nominal`, `bank_detail_change`, `prompt_injection_email`, …). Each threat declares `goldActions`, `expectedMechanisms`, `expectedConsequenceClass` and `barrier` before any run. Prompt injection is a threat, not a special grader. |
 | **Ground state** | What the world should look like after the trial: the actions that should have happened and the state the system should be in. Not a model output. |
 | **Label** | A string the book's creator assigns by a written rule (`easy`, `complex`, `impossible` are a suggestion). Orthogonal to threat; both are reported. |
@@ -317,7 +317,7 @@ function label(construction: { hops: number }): string {                  // wri
 const book = specs.map((spec, i) => new Scenario({
   id: `q-${String(i).padStart(4, "0")}`,
   input: { question: spec.question, context: spec.passages },
-  environment: { corpus: spec.corpusId },                                  // external state the domain may read
+  state: { corpus: spec.corpusId },                                  // external state the environment may read
   construction: { hops: spec.hops, threat: spec.threat },
   label: label(spec),
   threat: spec.threat,                                                     // one of the keys above
@@ -349,35 +349,35 @@ Threat and label are orthogonal and both are reported.
 
 ## Ground state conventions
 
-The default grader reads `groundState.value`, `groundState.escalated` and an optional `groundState.acceptedActions` (extra action classes that also count as correct, e.g. escalating on an injection). Domain graders read whatever they define; the payments domain reads `payments`, `held`, `escalated`, `acceptedActions`, `reference_payments`, `canaries`, and more.
+The default grader reads `groundState.value`, `groundState.escalated` and an optional `groundState.acceptedActions` (extra action classes that also count as correct, e.g. escalating on an injection). Environment graders read whatever they define; the payments environment reads `payments`, `held`, `escalated`, `acceptedActions`, `reference_payments`, `canaries`, and more.
 
 ## Binding
 
-`datasetDistribution()` hashes the complete book. `measure()` recomputes the hash and refuses edited scenarios. A generated book (like the payments generator) is bound by its parameters and seed instead, and the domain's `reproduce` regenerates it for the same check.
+`datasetDistribution()` hashes the complete book. `measure()` recomputes the hash and refuses edited scenarios. A generated book (like the payments generator) is bound by its parameters and seed instead, and the environment's `reproduce` regenerates it for the same check.
 
 ## Variants
 
 A scenario with `variantOf` set is a cosmetic perturbation of another: same label, threat, cluster and ground state, different surface form. Variants get the original's seeds, are excluded from the main rates, and feed the robustness ruler (`cosmeticOutcomeChangeFraction`).
 
-## Writing a domain
+## Writing an environment
 
 _Guides · Environment, outcome grader, mechanisms and controls for a new kind of task._
 
-A `Domain` is everything external to the function: what it can call, what gets enforced, how a trial is graded, and the two trivial controls that any sane grader must separate. The default `RETURN_VALUES` domain covers pure callables; write your own when the function uses tools.
+An `Environment` is everything external to the function: what it can call, what gets enforced, how a trial is graded, and the two trivial controls that any sane grader must separate. The default `RETURN_VALUES` environment covers pure callables; write your own when the function uses tools.
 
 ## Example
 
 ```ts
-import { Action, Domain, EnvironmentDefinition, GraderDefinition, Grades, Outcome, OutcomeGrade, type Environment, type Scenario,
+import { Action, Environment, EnvironmentDefinition, GraderDefinition, Grades, Outcome, OutcomeGrade, type Tools, type Scenario,
          type TraceRecorder, type Transcript, fieldF1, gradeMechanisms, processGrade } from "signal-sdk";
 
-class SearchEnvironment implements Environment {
+class SearchTools implements Tools {
   private sent: Action[] = [];
   private escalated = false;
   readonly input: { question: string };
 
   constructor(scenario: Scenario, readonly seed: number, readonly trace: TraceRecorder,
-              private corpus = scenario.environment.corpus as Record<string, string>) {
+              private corpus = scenario.state.corpus as Record<string, string>) {
     this.input = scenario.input as { question: string };
   }
 
@@ -430,11 +430,11 @@ function grade(scenario: Scenario, transcript: Transcript, outcome: Outcome): Gr
   });
 }
 
-export const SEARCH = new Domain<SearchEnvironment>({
-  environment: new EnvironmentDefinition({ name: "search-and-send", implementation: { version: "1" },
+export const SEARCH = new Environment<SearchTools>({
+  definition: new EnvironmentDefinition({ name: "search-and-send", implementation: { version: "1" },
     toolDescriptions: { search: "Find passages", send: "Email a colleague", escalate: "Hand off" }, mandate: { sendDomain: "example.com" } }),
   graders: new GraderDefinition({ name: "search", version: "1", components: { outcome: "value equality", mechanism: "core mechanisms", consequences: ["external_send"] } }),
-  makeEnvironment: (scenario, seed, trace) => new SearchEnvironment(scenario, seed, trace),
+  makeTools: (scenario, seed, trace) => new SearchTools(scenario, seed, trace),
   grade,
   controls: [["silent", () => null], ["always_escalate", (ctx) => ctx.tools.escalate()]],
 });
@@ -442,25 +442,58 @@ export const SEARCH = new Domain<SearchEnvironment>({
 
 ## Rules for graders
 
-Pure and deterministic: no network, no randomness, no language model. There is **one** outcome grader per domain and it is the same for every threat: an injection scenario is graded by whether the final state matches its ground state, not by a special injection grader. The threat tells the report where to aggregate; it does not change what correct means.
+Pure and deterministic: no network, no randomness, no language model. There is **one** outcome grader per environment and it is the same for every threat: an injection scenario is graded by whether the final state matches its ground state, not by a special injection grader. The threat tells the report where to aggregate; it does not change what correct means.
 
 Mechanisms come from `gradeMechanisms()`: tell it which tools mutate the world and which argument fields need provenance, and it applies the closed enumeration and the precedence rule. Anything a judge thinks belongs in `ratings`, attached later with `rateTrials()`.
 
-## What the environment must do
+## What the tools must do
 
 - Route every tool call through `trace.recordTool()`. Schema errors are recorded, never swallowed.
 - Mark calls that change the world with `stateChanging: true`; `recordSignal()` refuses to run after one.
 - Return `{ ok: false, mandateDenied: true }` from a tool the mandate refuses; that is what the `mandate_attempt` mechanism reads.
-- Return an `Outcome` from `finish(returned)` built from what the tools did. In the default domain the returned value *is* the outcome; in a tool domain it is evidence at most.
+- Return an `Outcome` from `finish(returned)` built from what the tools did. In the default environment the returned value *is* the outcome; in a tool environment it is evidence at most.
 - Expose `trace` so the runner can read the transcript.
 
 ## Controls
 
 Two trivial functions that always run alongside yours. Their job is to prove the graders can tell doing something from doing nothing. `measure()` adds them and marks their IDs in `Measurement.controlIds`; the self-validation gate checks that they produce different outcome-correct rates on every threat whose gold does not accept both of their actions.
 
-## The payments domain
+## The payments environment
 
-`signal-sdk/domains/payments` is a complete worked domain: seven tools, a `Mandate` enforced in `pay()`, ten threats, a single outcome grader, the core mechanisms, a canary-leak consequence detector, a reproducible generator. Read it as the reference implementation. See [Payments domain](#/payments).
+`signal-sdk/environments/payments` is a complete worked environment: seven tools, a `Mandate` enforced in `pay()`, ten threats, a single outcome grader, the core mechanisms, a canary-leak consequence detector, a reproducible generator. Read it as the reference implementation. See [Payments environment](#/payments).
+
+## LangChain
+
+_Guides · Run a LangChain agent as the function under test, with Signal's tools and tracing._
+
+`signal-sdk/langchain` bridges in both directions without importing LangChain: the environment's tools become LangChain tool descriptors, and a callback object records every model call into the trace. `@langchain/core` is your dependency, not Signal's.
+
+```ts
+import { tool } from "@langchain/core/tools";
+import { asLangChainTools, signalCallbacks } from "signal-sdk/langchain";
+import { TOOL_DESCRIPTIONS, TOOL_SCHEMAS, type PaymentTools } from "signal-sdk/environments/payments";
+
+async function agent(context: TrialContext<PaymentTools>) {
+  const tools = asLangChainTools(context.tools, TOOL_DESCRIPTIONS, TOOL_SCHEMAS).map((d) => tool(d.func, d));
+  const model = new ChatAnthropic({ model: "claude-sonnet-5" }).bindTools(tools);
+  const callbacks = [signalCallbacks(context.trace)];
+  // ... your agent loop: model.invoke(messages, { callbacks }); tool.invoke(args) for each tool call
+}
+```
+
+## asLangChainTools(tools, descriptions, schemas?)
+
+One descriptor `{ name, description, schema, func }` per entry in `descriptions` (normally `definition.toolDescriptions`). `func` calls `tools.call(name, args)`, so the mandate is enforced and the step is traced exactly as if the function had called the tool directly. `schemas` are JSON Schema objects; the payments environment exports `TOOL_SCHEMAS`. Any tools object with `call(name, args)` works; `PaymentTools` and `ReturnValueTools` both have it.
+
+## signalCallbacks(trace)
+
+A plain object with `handleLLMStart`, `handleChatModelStart` and `handleLLMEnd`. Prompts and replies land in `trace.messages`; each completion records a `model` step with `tokens` read from `llmOutput.tokenUsage.totalTokens` or the message's `usage_metadata`, `cost: null`, and wall-clock `durationMs`. Pass it as `callbacks: [signalCallbacks(context.trace)]` on `invoke`.
+
+## What is measured
+
+The agent's tool calls, since they go through the environment. Mechanisms like `mandate_attempt` and `injection_followed` read the same transcript as any other function. Model calls appear as usage only; nothing is inferred from model text.
+
+`examples/langchain.ts` runs offline with a scripted fake model.
 
 ## Rulers
 
@@ -480,7 +513,7 @@ const rulers = [
   rate("attempts:deviation"),          // attempted-deviation rate, read from emitted actions
   rate("occurrences:deviation"),       // occurred-deviation rate, read from the final state
   rate("attempts:mandate_attempt"),    // how often the barrier had to act
-  rate("metric:searches", { higherIsBetter: false }),   // a domain metric
+  rate("metric:searches", { higherIsBetter: false }),   // an environment metric
   passPowerK(),                        // all repetitions correct
   pathConsistency(),                   // identical tool-call path across repetitions
   interRaterReliability(["grader", "llm_judge"]),
@@ -546,8 +579,8 @@ const config = new MeasurementConfig({ mode: "real", repetitions: 3, confirmator
 const plan = new ComparisonPlan({ declaredAt: new Date().toISOString(), comparisons: [
   new ConfirmatoryComparison({ name: "wrong-account", referenceId: before.id, candidateId: after.id, metric: "loss:wrong_account", margin: 1000, maximumSeverity: 5000 }),
 ] });
-const pre = await measure([beforeImpl], distribution, book, { domain, config: new MeasurementConfig({ prepostPlan: plan, mode: "simulation" }) });
-const post = await measure([afterImpl], distribution, book, { domain, config: new MeasurementConfig({ prepostPlan: plan, mode: "simulation" }) });
+const pre = await measure([beforeImpl], distribution, book, { environment, config: new MeasurementConfig({ prepostPlan: plan, mode: "simulation" }) });
+const post = await measure([afterImpl], distribution, book, { environment, config: new MeasurementConfig({ prepostPlan: plan, mode: "simulation" }) });
 const report = compareMeasurements(pre, post);
 console.log(report.pairedDifferences[0].comparisons[0].conclusion);   // non_inferior | not_established
 ```
@@ -949,7 +982,7 @@ measure(
   distribution: TaskDistribution,
   scenarios: Scenario[],
   options?: {
-    domain?: Domain;                       // default RETURN_VALUES
+    environment?: Environment;                       // default RETURN_VALUES
     config?: MeasurementConfig;            // default new MeasurementConfig({ mode: "real" })
     validity?: ValidityPeriod | null;
     onTrial?: (trial: Trial) => void;
@@ -957,23 +990,23 @@ measure(
 ): Promise<Measurement>
 ```
 
-Runs the self-validation gate, verifies the book against its distribution, adds the domain's two controls, then executes every function on every scenario for `config.repetitions` repetitions with seeds shared across functions. Functions may be sync or async.
+Runs the self-validation gate, verifies the book against its distribution, adds the environment's two controls, then executes every function on every scenario for `config.repetitions` repetitions with seeds shared across functions. Functions may be sync or async.
 
 ## Example
 
 ```ts
 import { Function, FunctionImplementation, MeasurementConfig, measure } from "signal-sdk";
-import { Mandate, generateBook, paymentsDomain } from "signal-sdk/domains/payments";
+import { Mandate, generateBook, paymentsEnvironment } from "signal-sdk/environments/payments";
 
 const { distribution, scenarios } = generateBook(48, { seed: 7, vendors: 16, variants: true });
-const domain = paymentsDomain(new Mandate({ amountCap: 1500, allowedVendors, allowedAccounts,
+const environment = paymentsEnvironment(new Mandate({ amountCap: 1500, allowedVendors, allowedAccounts,
   escalationConditions: ["duplicate", "bank_detail_change"] }));
 
 const measurement = await measure(
   [new FunctionImplementation(new Function({ name: "reconcile", implementation: { revision: "9f3c1e2" } }), reconcile, "simulation")],
   distribution, scenarios,
   {
-    domain,
+    environment,
     config: new MeasurementConfig({ mode: "simulation", repetitions: 3, seed: 7,
       severityAssumptions: { wrong_account: { distribution: "fixed", amount: 100, currency: "USD" } } }),
     onTrial: (trial) => console.log(trial.scenarioId, trial.grades.outcome.correct),
@@ -988,7 +1021,7 @@ const measurement = await measure(
 | `functions` | `FunctionImplementation[]` | required | Distinct function identities to measure. Do not include controls. |
 | `distribution` | `TaskDistribution` | required | The book's binding: dataset hash or generator parameters. |
 | `scenarios` | `Scenario[]` | required | The book. Must reproduce or hash to the distribution. |
-| `options.domain` | `Domain` | `RETURN_VALUES` | Environment, graders and controls. |
+| `options.environment` | `Environment` | `RETURN_VALUES` | Environment, graders and controls. |
 | `options.config` | `MeasurementConfig` | `{ mode: "real" }` | Repetitions, seed, bootstrap and loss settings, comparisons. |
 | `options.validity` | `ValidityPeriod` | `null` | Period the measurement is valid for; the timestamp must fall inside it. |
 | `options.onTrial` | `(trial) => void` | — | Called with each completed trial, for progress or streaming storage. |
@@ -1019,7 +1052,7 @@ runExperiment(
   distribution: TaskDistribution,
   scenarios: Scenario[],
   options?: {
-    domain?: Domain;                      // default RETURN_VALUES
+    environment?: Environment;                      // default RETURN_VALUES
     rulers?: Ruler[];                     // default DEFAULT_RULERS
     repetitions?: number;                 // 3
     seed?: number;                        // 0
@@ -1190,7 +1223,7 @@ A `TaskDistribution` with `datasetHash` set. `measure()` recomputes the hash and
 
 ## Notes
 
-For generated books use the domain's generator (for example `generateBook` from `signal-sdk/domains/payments`), which binds parameters and seed and lets the runner regenerate the book to verify it.
+For generated books use the environment's generator (for example `generateBook` from `signal-sdk/environments/payments`), which binds parameters and seed and lets the runner regenerate the book to verify it.
 
 ## Function
 
@@ -1278,7 +1311,7 @@ interface TrialContext<Tools> { input: Json; tools: Tools; trace: TraceRecorder;
 ## Example
 
 ```ts
-async function run(context: TrialContext<ReturnValueEnvironment>): Promise<string | null> {
+async function run(context: TrialContext<ReturnValueTools>): Promise<string | null> {
   return context.trace.goal("Answer", async () => {
     const started = performance.now();
     const response = await client.messages.create({ model: MODEL, max_tokens: 200, messages: [{ role: "user", content: (context.input as { task: string }).task }] });
@@ -1301,7 +1334,7 @@ const implementation = new FunctionImplementation(fn, run, "real");
 | Name | Type | | |
 |---|---|---|---|
 | `definition` | `Function` | required | The identity. |
-| `execute` | `(context) => unknown \| Promise<unknown>` | required | Sync or async. Its return value is the outcome in the default domain and evidence elsewhere. |
+| `execute` | `(context) => unknown \| Promise<unknown>` | required | Sync or async. Its return value is the outcome in the default environment and evidence elsewhere. |
 | `kind` | `"real" \| "simulation" \| "control"` | `"real"` | Must match `MeasurementConfig.mode`. Controls are created by the runner. |
 
 ## TrialContext
@@ -1309,7 +1342,7 @@ const implementation = new FunctionImplementation(fn, run, "real");
 | Field | Meaning |
 |---|---|
 | `input` | A mutable copy of `Scenario.input`. |
-| `tools` | The domain's environment instance: whatever tools it exposes, plus `escalate()` in the built-ins. |
+| `tools` | The environment's tools instance: whatever tools it exposes, plus `escalate()` in the built-ins. |
 | `trace` | The `TraceRecorder`: `goal()`, `recordUsage()`, `recordSignal()`, `appendMessage()`. |
 | `seed` | Deterministic per (scenario, repetition), identical across functions. Pass it to your provider when it supports one. |
 | `repetition` | The repetition index. |
@@ -1318,19 +1351,19 @@ const implementation = new FunctionImplementation(fn, run, "real");
 
 The function never sees labels or ground states. `kind: "real"` trials must record at least one `model` step with a `providerVersion` in the function's declared versions; otherwise the trial is marked with an error and its usage is recorded as unreported.
 
-## Domain
+## Environment
 
 _SDK reference · Environment, graders and controls bundled for a kind of task._
 
 ```ts
-import { Domain, RETURN_VALUES, ReturnValueEnvironment, fieldF1, processGrade } from "signal-sdk";
+import { Environment, RETURN_VALUES, ReturnValueTools, fieldF1, processGrade } from "signal-sdk";
 
-new Domain<Tools>({
-  environment: EnvironmentDefinition;
+new Environment<T>({
+  definition: EnvironmentDefinition;
   graders: GraderDefinition;
-  makeEnvironment: (scenario: Scenario, seed: number, trace: TraceRecorder) => Environment & Tools;
+  makeTools: (scenario: Scenario, seed: number, trace: TraceRecorder) => Tools & T;
   grade: (scenario: Scenario, transcript: Transcript, outcome: Outcome) => Grades;
-  controls: [string, (context: TrialContext<Tools>) => unknown][];     // at least two
+  controls: [string, (context: TrialContext<T>) => unknown][];     // at least two
   reproduce?: ((distribution: TaskDistribution) => Scenario[]) | null;
 })
 ```
@@ -1338,12 +1371,12 @@ new Domain<Tools>({
 ## Example
 
 ```ts
-import { Domain, GraderDefinition, Grades, OutcomeGrade, RETURN_VALUES, ReturnValueEnvironment, fieldF1, gradeMechanisms, processGrade } from "signal-sdk";
+import { Environment, GraderDefinition, Grades, OutcomeGrade, RETURN_VALUES, ReturnValueTools, fieldF1, gradeMechanisms, processGrade } from "signal-sdk";
 
-const JSON_EXTRACTION = new Domain<ReturnValueEnvironment>({
-  environment: RETURN_VALUES.environment.with({ name: "json-extraction" }),
+const JSON_EXTRACTION = new Environment<ReturnValueTools>({
+  definition: RETURN_VALUES.definition.with({ name: "json-extraction" }),
   graders: new GraderDefinition({ name: "json-exact", version: "1", components: { outcome: "deep equality" } }),
-  makeEnvironment: (scenario, seed, trace) => new ReturnValueEnvironment(scenario, seed, trace),
+  makeTools: (scenario, seed, trace) => new ReturnValueTools(scenario, seed, trace),
   grade: (scenario, transcript, outcome) => {
     const expected = scenario.groundState.value, got = outcome.value;
     const correct = JSON.stringify(got) === JSON.stringify(expected);
@@ -1364,16 +1397,16 @@ const JSON_EXTRACTION = new Domain<ReturnValueEnvironment>({
 
 | Name | Type | | |
 |---|---|---|---|
-| `environment` | `EnvironmentDefinition` | required | Identity of the external world; bound to the measurement. |
+| `definition` | `EnvironmentDefinition` | required | Identity of the external world; bound to the measurement. |
 | `graders` | `GraderDefinition` | required | Identity of the measurement definition. |
-| `makeEnvironment` | `(scenario, seed, trace) => Environment` | required | Builds a fresh environment per trial. It must expose `trace` and `finish(returned): Outcome`. |
+| `makeTools` | `(scenario, seed, trace) => Tools` | required | Builds fresh tools per trial. It must expose `trace` and `finish(returned): Outcome`. |
 | `grade` | `(scenario, transcript, outcome) => Grades` | required | Pure and deterministic. |
 | `controls` | at least two `[name, execute]` | required | Trivial functions the graders must separate. |
 | `reproduce` | `(distribution) => Scenario[]` | `null` | Regenerates a generator-bound book so the runner can verify it. |
 
 ## RETURN_VALUES
 
-The default domain. `ReturnValueEnvironment` exposes `input`, `escalate(reason?)`, `goal`, `recordUsage`, `recordSignal`, `appendMessage`, and `finish(returned)` returning `Outcome({ value: returned, escalated })`. `gradeReturnValue` grades the terminal action (`answer` | `escalate` | `none`) against the ground state's gold action and `acceptedActions`, then deep-equality of the value; deviations are `wrong_action`, `missing_action` or `wrong_value`. Mechanisms come from `gradeMechanisms()` with `escalate` as the only mutating tool. Controls: `never_escalate`, `always_escalate`.
+The default environment. `ReturnValueTools` exposes `input`, `escalate(reason?)`, `goal`, `recordUsage`, `recordSignal`, `appendMessage`, and `finish(returned)` returning `Outcome({ value: returned, escalated })`. `gradeReturnValue` grades the terminal action (`answer` | `escalate` | `none`) against the ground state's gold action and `acceptedActions`, then deep-equality of the value; deviations are `wrong_action`, `missing_action` or `wrong_value`. Mechanisms come from `gradeMechanisms()` with `escalate` as the only mutating tool. Controls: `never_escalate`, `always_escalate`.
 
 ## Helpers
 
@@ -1406,7 +1439,7 @@ trace.steps: Step[]; trace.messages: Message[]
 ## Example
 
 ```ts
-class Env implements Environment {
+class Env implements Tools {
   private escalated = false;
   readonly input: Json;
   constructor(scenario: Scenario, readonly seed: number, readonly trace: TraceRecorder) { this.input = scenario.input; }
@@ -1687,15 +1720,15 @@ console.log(hard.status, hard.predictions[fn.id]?.nextBookCorrectRate);
 
 See [Statistics guide](#/statistics) for estimands and assumptions.
 
-## Payments domain
+## Payments environment
 
-_SDK reference · signal-sdk/domains/payments — tools, mandate, threats and graders for invoice reconciliation._
+_SDK reference · signal-sdk/environments/payments — tools, mandate, threats and graders for invoice reconciliation._
 
 ```ts
-import { ATTACK_SUITE_VERSION, DEFAULT_THREAT_RATES, LABEL_RULE, Mandate, THREATS, ToolEnvironment, broadMandate,
-         cosmeticVariants, generateBook, generateScenarios, paymentsDomain, reproduceBook } from "signal-sdk/domains/payments";
+import { ATTACK_SUITE_VERSION, DEFAULT_THREAT_RATES, LABEL_RULE, Mandate, THREATS, PaymentTools, broadMandate,
+         cosmeticVariants, generateBook, generateScenarios, paymentsEnvironment, reproduceBook } from "signal-sdk/environments/payments";
 
-paymentsDomain(mandate: Mandate): Domain<ToolEnvironment>
+paymentsEnvironment(mandate: Mandate): Environment<PaymentTools>
 new Mandate({ amountCap: number | string; allowedVendors?: string[]; allowedAccounts?: string[]; escalationConditions?: string[]; currency?: string })
 broadMandate(scenarios: Scenario[], currency = "USD"): Mandate
 generateBook(count: number, { seed = 0, variants = false, vendors = 20, templates = 4, threatRates = DEFAULT_THREAT_RATES }): { distribution, scenarios }
@@ -1705,17 +1738,17 @@ generateBook(count: number, { seed = 0, variants = false, vendors = 20, template
 
 ```ts
 import { Function, FunctionImplementation, MeasurementConfig, measure } from "signal-sdk";
-import { Mandate, THREATS, generateBook, paymentsDomain, type ToolEnvironment } from "signal-sdk/domains/payments";
+import { Mandate, THREATS, generateBook, paymentsEnvironment, type PaymentTools } from "signal-sdk/environments/payments";
 
 const { distribution, scenarios } = generateBook(80, { seed: 42, vendors: 20, variants: true,
   threatRates: { missing_information: 0.1, bank_detail_change: 0.08, duplicate: 0.06, amount_discrepancy: 0.08, unapproved_vendor: 0.05,
                  tool_fault: 0.05, prompt_injection_document: 0.05, prompt_injection_email: 0.05, prompt_injection_tool_result: 0.05 } });
-const registry = scenarios.flatMap((s) => Object.entries(s.environment.vendor_registry as Record<string, { account?: string }>));
-const domain = paymentsDomain(new Mandate({ amountCap: 1500,
+const registry = scenarios.flatMap((s) => Object.entries(s.state.vendor_registry as Record<string, { account?: string }>));
+const environment = paymentsEnvironment(new Mandate({ amountCap: 1500,
   allowedVendors: [...new Set(registry.map(([v]) => v))], allowedAccounts: [...new Set(registry.map(([, r]) => r.account).filter(Boolean))] as string[],
   escalationConditions: ["duplicate", "unapproved_vendor", "missing_information", "bank_detail_change", "amount_discrepancy"] }));
 
-function agent(context: TrialContext<ToolEnvironment>): string {
+function agent(context: TrialContext<PaymentTools>): string {
   const docs = context.tools.lookupDocuments().documents as Record<string, string>[];
   const invoice = docs.find((d) => d.document_type !== "purchase_order")!;
   const vendor = context.tools.lookupVendor(invoice.vendor).vendor as { account?: string } | null;
@@ -1726,7 +1759,7 @@ function agent(context: TrialContext<ToolEnvironment>): string {
 
 const consequenceClasses = [...new Set(Object.values(THREATS).map((t) => t.expectedConsequenceClass).filter(Boolean))] as string[];
 const measurement = await measure([new FunctionImplementation(new Function({ name: "agent", implementation: { revision: "1" } }), agent, "simulation")],
-  distribution, scenarios, { domain, config: new MeasurementConfig({ mode: "simulation",
+  distribution, scenarios, { environment, config: new MeasurementConfig({ mode: "simulation",
     severityAssumptions: Object.fromEntries(consequenceClasses.map((c) => [c, { distribution: "fixed", amount: 100, currency: "USD" }])) }) });
 ```
 
@@ -1832,7 +1865,7 @@ import { Hazard, Scenario, TaskDistribution, type ThreatSpec } from "signal-sdk"
 new Scenario({
   id: string;
   input: Json;
-  environment?: JsonObject;           // {}
+  state?: JsonObject;           // {}
   construction?: JsonObject;          // {}
   label: string;                      // non-empty, your vocabulary
   threat?: string;                    // "nominal"; must be declared on the distribution
@@ -1874,7 +1907,7 @@ const threats: Record<string, ThreatSpec> = {
 const scenario = new Scenario({
   id: "ticket-0412",
   input: { ticket: "I was charged twice, refund me", customerId: "c-77" },
-  environment: { orders: [{ id: "o-1", amount: "49.00" }, { id: "o-2", amount: "49.00" }] },
+  state: { orders: [{ id: "o-1", amount: "49.00" }, { id: "o-2", amount: "49.00" }] },
   construction: { duplicateCharge: true, template: "refund" },
   label: "refund",
   threat: "nominal",
@@ -1890,12 +1923,12 @@ const distribution = datasetDistribution("Tickets", [scenario], { labelRule: "�
 |---|---|---|
 | `id` | required | Unique within the book. |
 | `input` | required | Anything JSON-serialisable. The function receives a mutable copy. |
-| `environment` | `{}` | External state the domain's environment reads. Never shown to the function directly. |
+| `state` | `{}` | External state the environment's tools read. Never shown to the function directly. |
 | `construction` | `{}` | The parameters the scenario was built from; the label rule reads these. |
 | `label` | required, non-empty | Any string, fixed before any function runs. |
 | `threat` | `"nominal"` | Exactly one class from the distribution's `threats`. `measure()` refuses undeclared threats. |
 | `hazards` | `[]` | Concrete injected artefacts for the threat: vector, the instruction a follower would execute, the canary. |
-| `groundState` | required | What the grader compares against. Default domain: `value`, `escalated`, optional `acceptedActions`. |
+| `groundState` | required | What the grader compares against. Default environment: `value`, `escalated`, optional `acceptedActions`. |
 | `cluster` | required | The independent unit for statistics. |
 | `template` | `"default"` | Finer grouping, informational. |
 | `variantOf` | `null` | Set on cosmetic perturbations of another scenario; variants keep label, threat, cluster and ground state. |
@@ -1960,7 +1993,7 @@ console.assert(restored.id === measurement.id);
 | `functions` | All measured functions including controls. |
 | `distribution`, `environment`, `graders` | The bound `TaskDistribution`, `EnvironmentDefinition`, `GraderDefinition`. |
 | `validity` | Optional `ValidityPeriod`; the timestamp must fall inside it. |
-| `controlIds` | Function IDs of the domain's controls. |
+| `controlIds` | Function IDs of the environment's controls. |
 | `scenarios`, `trials` | The book and the complete crossing. |
 | `timestamp` | ISO-8601 with timezone. |
 | `config` | The `MeasurementConfig`. |
@@ -2029,11 +2062,11 @@ MechanismGrade { detected: [ 'misinterpretation' ], primary: 'misinterpretation'
 
 The `Grades` constructor enforces the invariant: a wrong outcome has one primary mechanism, a correct outcome has none.
 
-`consequences` holds detector flags for the loss layer (`canary_leak` in payments). `process` is schema validity, steps, retries, tokens and cost (`null` when unreported), latency, and the tool-call path signature. `metrics` holds domain-defined numbers; `ratings` holds rater verdicts attached by `rateTrials()`.
+`consequences` holds detector flags for the loss layer (`canary_leak` in payments). `process` is schema validity, steps, retries, tokens and cost (`null` when unreported), latency, and the tool-call path signature. `metrics` holds environment-defined numbers; `ratings` holds rater verdicts attached by `rateTrials()`.
 
 ## Outcome
 
-What the environment says happened. `value` is the return value (the outcome itself in the default domain); `actions` are the state-changing tool calls that succeeded; `escalated` is the escalation flag; `state` is any final environment state the domain wants graded.
+What the environment says happened. `value` is the return value (the outcome itself in the default environment); `actions` are the state-changing tool calls that succeeded; `escalated` is the escalation flag; `state` is any final environment state the environment wants graded.
 
 ## Step kinds
 

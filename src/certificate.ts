@@ -179,7 +179,7 @@ export function markdown(certificate: RiskCertificate): string {
       lines.push("", column.note, "");
     } else if (section.title === "Custom metrics") {
       const metrics = data as Record<string, Estimate>;
-      if (!Object.keys(metrics).length) lines.push("No custom metrics are defined in this domain.", "");
+      if (!Object.keys(metrics).length) lines.push("No custom metrics are defined in this environment.", "");
       else { lines.push("| Metric | Estimate [interval] |", "|---|---|", ...Object.entries(metrics).map(([k, v]) => `| ${k} | ${rate(v)} |`), ""); }
     } else if (section.title === "Function identity") {
       const fn = data as { name: string; model: JsonObject | null; models: JsonObject[]; implementation: JsonObject; componentHashes: Record<string, string> };

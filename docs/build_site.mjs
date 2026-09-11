@@ -14,10 +14,10 @@ const VERSION = JSON.parse(readFileSync(join(DOCS, "..", "package.json"), "utf8"
 
 const NAV = [
   ["Get started", ["introduction", "installation", "quickstart", "experiments"]],
-  ["Guides", ["concepts", "scenarios", "domains", "rulers", "comparisons", "certificates", "statistics", "limitations"]],
+  ["Guides", ["concepts", "scenarios", "environments", "langchain", "rulers", "comparisons", "certificates", "statistics", "limitations"]],
   ["SDK reference", ["ref-measure", "ref-run-experiment", "ref-rate-trials", "ref-dataset-distribution", "ref-function", "ref-function-implementation",
-    "ref-domain", "ref-trace-recorder", "ref-rulers", "ref-certificates", "ref-visualization", "ref-statistics", "ref-payments", "ref-cli"]],
-  ["Types", ["type-scenario", "type-measurement", "type-grades", "type-environment"]],
+    "ref-environment", "ref-trace-recorder", "ref-rulers", "ref-certificates", "ref-visualization", "ref-statistics", "ref-payments", "ref-cli"]],
+  ["Types", ["type-scenario", "type-measurement", "type-grades", "type-definitions"]],
 ];
 
 function parse(path) {

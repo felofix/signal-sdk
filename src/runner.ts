@@ -1,8 +1,8 @@
-/** Crossed execution with isolated environments, domain controls, and a validation gate. */
+/** Crossed execution with isolated tools, environment controls, and a validation gate. */
 
 import { createHash } from "node:crypto";
 import { performance } from "node:perf_hooks";
-import { type Domain, type Execute, RETURN_VALUES } from "./domain.js";
+import { type Environment, type Execute, RETURN_VALUES } from "./environment.js";
 import {
   Function, Measurement, MeasurementConfig, NOMINAL_THREAT, TaskDistribution, Scenario, type ThreatSpec, Trial, ValidationError, type ValidityPeriod,
   clone, contentHash, now,
@@ -13,12 +13,12 @@ import { selfValidate } from "./validation.js";
 
 export type ImplementationKind = "real" | "simulation" | "control";
 
-export class FunctionImplementation<Tools = unknown> {
+export class FunctionImplementation<T = unknown> {
   readonly definition: Function;
-  readonly execute: Execute<Tools>;
+  readonly execute: Execute<T>;
   readonly kind: ImplementationKind;
 
-  constructor(definition: Function, execute: Execute<Tools>, kind: ImplementationKind = "real") {
+  constructor(definition: Function, execute: Execute<T>, kind: ImplementationKind = "real") {
     if (!["real", "simulation", "control"].includes(kind) || typeof execute !== "function") {
       throw new ValidationError("A function implementation needs a callable and a valid execution kind");
     }
@@ -30,9 +30,9 @@ export class FunctionImplementation<Tools = unknown> {
 }
 
 /** Controls are functions like any other; their identity is the control itself. */
-export function controlFunctions<Tools>(domain: Domain<Tools>): FunctionImplementation<Tools>[] {
-  return domain.controls.map(([name, execute]) =>
-    new FunctionImplementation(new Function({ name, implementation: { control: name, domain: domain.environment.name } }), execute, "control"));
+export function controlFunctions<T>(environment: Environment<T>): FunctionImplementation<T>[] {
+  return environment.controls.map(([name, execute]) =>
+    new FunctionImplementation(new Function({ name, implementation: { control: name, environment: environment.definition.name } }), execute, "control"));
 }
 
 export function trialSeed(masterSeed: number, scenario: Scenario, repetition: number): number {
@@ -50,13 +50,13 @@ export function datasetDistribution(name: string, scenarios: readonly Scenario[]
     threatRates: options.threatRates ?? {}, attackSuiteVersion: options.attackSuiteVersion ?? null, topCluster: options.topCluster ?? "scenario" });
 }
 
-function verifyBook(distribution: TaskDistribution, scenarios: readonly Scenario[], domain: Domain<unknown>): void {
+function verifyBook(distribution: TaskDistribution, scenarios: readonly Scenario[], environment: Environment<unknown>): void {
   const hash = contentHash(scenarios.map((t) => t.toPlain(false)));
   if (distribution.datasetHash) {
     if (hash !== distribution.datasetHash) throw new ValidationError("Scenario content does not match the distribution dataset hash");
-  } else if (!domain.reproduce) {
-    throw new ValidationError("This domain cannot reproduce generated books; bind scenarios with datasetDistribution");
-  } else if (hash !== contentHash(domain.reproduce(distribution).map((t) => t.toPlain(false)))) {
+  } else if (!environment.reproduce) {
+    throw new ValidationError("This environment cannot reproduce generated books; bind scenarios with datasetDistribution");
+  } else if (hash !== contentHash(environment.reproduce(distribution).map((t) => t.toPlain(false)))) {
     throw new ValidationError("Scenarios do not reproduce the bound generator configuration");
   }
   for (const scenario of scenarios) {
@@ -72,10 +72,10 @@ function verifyBook(distribution: TaskDistribution, scenarios: readonly Scenario
   }
 }
 
-export async function execute<Tools>(implementation: FunctionImplementation<Tools>, scenario: Scenario, repetition: number, seed: number,
-  domain: Domain<Tools> = RETURN_VALUES as unknown as Domain<Tools>): Promise<Trial> {
+export async function execute<T>(implementation: FunctionImplementation<T>, scenario: Scenario, repetition: number, seed: number,
+  environment: Environment<T> = RETURN_VALUES as unknown as Environment<T>): Promise<Trial> {
   const trace = new TraceRecorder();
-  const tools = domain.makeEnvironment(scenario, seed, trace);
+  const tools = environment.makeTools(scenario, seed, trace);
   const input = scenario.input;
   const task = input && typeof input === "object" && !Array.isArray(input) && "task" in input ? input.task : input;
   trace.appendMessage("user", typeof task === "string" ? task : JSON.stringify(task));
@@ -104,20 +104,20 @@ export async function execute<Tools>(implementation: FunctionImplementation<Tool
   const transcript = trace.transcript();
   const outcome = tools.finish(response);
   return new Trial({ scenarioId: scenario.id, functionId: implementation.definition.id, repetition, seed, transcript, outcome,
-    grades: domain.grade(scenario, transcript, outcome), error });
+    grades: environment.grade(scenario, transcript, outcome), error });
 }
 
-export interface MeasureOptions<Tools> {
-  domain?: Domain<Tools>; config?: MeasurementConfig | null; validity?: ValidityPeriod | null; onTrial?: (trial: Trial) => void;
+export interface MeasureOptions<T> {
+  environment?: Environment<T>; config?: MeasurementConfig | null; validity?: ValidityPeriod | null; onTrial?: (trial: Trial) => void;
 }
 
-/** Run the full crossing. Domain controls and self-validation are mandatory. */
-export async function measure<Tools = unknown>(functions: readonly FunctionImplementation<Tools>[], distribution: TaskDistribution,
-  scenarios: readonly Scenario[], options: MeasureOptions<Tools> = {}): Promise<Measurement> {
-  const domain = (options.domain ?? RETURN_VALUES) as unknown as Domain<Tools>;
+/** Run the full crossing. Environment controls and self-validation are mandatory. */
+export async function measure<T = unknown>(functions: readonly FunctionImplementation<T>[], distribution: TaskDistribution,
+  scenarios: readonly Scenario[], options: MeasureOptions<T> = {}): Promise<Measurement> {
+  const environment = (options.environment ?? RETURN_VALUES) as unknown as Environment<T>;
   const config = options.config ?? new MeasurementConfig({ mode: "real" });
   if (!functions.length) throw new ValidationError("Provide at least one function implementation");
-  verifyBook(distribution, scenarios, domain as unknown as Domain<unknown>);
+  verifyBook(distribution, scenarios, environment as unknown as Environment<unknown>);
   const timestamp = now();
   if (options.validity && !options.validity.contains(timestamp)) throw new ValidationError("Measurement must occur within its validity period");
   if (config.mode === "simulation" && functions.some((f) => f.kind === "real")) throw new ValidationError("Real functions cannot run in simulation mode");
@@ -130,7 +130,7 @@ export async function measure<Tools = unknown>(functions: readonly FunctionImple
   }
   const validation = await selfValidate();
   if (validation.status !== "PASS") throw new Error("Self-validation failed; no function execution is allowed");
-  const controls = controlFunctions(domain);
+  const controls = controlFunctions(environment);
   const implementations = [...functions, ...controls];
   const started = performance.now();
   const trials: Trial[] = [];
@@ -138,13 +138,13 @@ export async function measure<Tools = unknown>(functions: readonly FunctionImple
     for (let repetition = 0; repetition < config.repetitions; repetition++) {
       const seed = trialSeed(config.seed, scenario, repetition);
       for (const implementation of implementations) {
-        const trial = await execute(implementation, scenario, repetition, seed, domain);
+        const trial = await execute(implementation, scenario, repetition, seed, environment);
         trials.push(trial);
         options.onTrial?.(trial);
       }
     }
   }
-  return new Measurement({ functions: implementations.map((f) => f.definition), distribution, environment: domain.environment, graders: domain.graders,
+  return new Measurement({ functions: implementations.map((f) => f.definition), distribution, environment: environment.definition, graders: environment.graders,
     validity: options.validity ?? null, controlIds: controls.map((c) => c.definition.id), scenarios, trials, timestamp, config,
     validation: validation as unknown as Record<string, never>, elapsedSeconds: (performance.now() - started) / 1000 });
 }

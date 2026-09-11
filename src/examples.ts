@@ -1,13 +1,13 @@
-/** Transparent simulation functions: a generic return-value task and the payment domain. */
+/** Transparent simulation functions: a generic return-value task and the payment environment. */
 
-import type { TrialContext } from "./domain.js";
-import { Mandate, THREATS, type ToolEnvironment, generateBook, paymentsDomain } from "./domains/payments/index.js";
+import type { TrialContext } from "./environment.js";
+import { Mandate, THREATS, type PaymentTools, generateBook, paymentsEnvironment } from "./environments/payments/index.js";
 import { Function, type JsonObject, Label, type Measurement, MeasurementConfig, ModelIdentity, type TaskDistribution, Scenario } from "./models.js";
 import { FunctionImplementation, datasetDistribution, measure } from "./runner.js";
 import { Rng } from "./statistics/random.js";
 
 /** A deterministic reference policy using only observable input and tools. */
-export function reconcile(context: TrialContext<ToolEnvironment>): string {
+export function reconcile(context: TrialContext<PaymentTools>): string {
   const tools = context.tools;
   return tools.goal("Reconcile invoice", () => {
     let response = tools.goal("Read documents", () => {
@@ -43,7 +43,7 @@ export function demoDefinition(name = "reconcile"): Function {
 export function demoMandate(scenarios: readonly Scenario[]): Mandate {
   const vendors = new Set<string>(), accounts = new Set<string>();
   for (const t of scenarios) {
-    const registry = (t.environment.vendor_registry as Record<string, JsonObject>) ?? {};
+    const registry = (t.state.vendor_registry as Record<string, JsonObject>) ?? {};
     for (const [vendor, record] of Object.entries(registry)) { vendors.add(vendor); if (record.account) accounts.add(record.account as string); }
   }
   return new Mandate({ amountCap: 1500, allowedVendors: [...vendors].sort(), allowedAccounts: [...accounts].sort(),
@@ -56,10 +56,10 @@ export async function demo(count = 48, seed = 7, repetitions = 3, variants = tru
     severityAssumptions: Object.fromEntries([...new Set(Object.values(THREATS).map((t) => t.expectedConsequenceClass).filter((c): c is string => Boolean(c)))]
       .map((c) => [c, { distribution: "fixed" as const, amount: 100, currency: "USD" }])) });
   return measure([new FunctionImplementation(demoDefinition(), reconcile, "simulation")], distribution, scenarios,
-    { domain: paymentsDomain(demoMandate(scenarios)), config });
+    { environment: paymentsEnvironment(demoMandate(scenarios)), config });
 }
 
-/** A generic book for the default domain: answer a sum, or escalate when an operand is missing. */
+/** A generic book for the default environment: answer a sum, or escalate when an operand is missing. */
 export function arithmeticBook(count = 24, seed = 0): { distribution: TaskDistribution; scenarios: Scenario[] } {
   const rng = new Rng(seed);
   const scenarios: Scenario[] = [];

@@ -1,7 +1,7 @@
 /** Signal: measure agent systems with deterministic graders, rulers and paired statistics. */
 
-export { Domain, RETURN_VALUES, ReturnValueEnvironment, fieldF1, gradeReturnValue, processGrade } from "./domain.js";
-export type { Environment, EnvironmentFactory, Execute, Grader, TrialContext } from "./domain.js";
+export { Environment, RETURN_VALUES, ReturnValueTools, fieldF1, gradeReturnValue, processGrade } from "./environment.js";
+export type { Tools, ToolsFactory, Execute, Grader, TrialContext } from "./environment.js";
 export { Experiment, evaluate, rateTrials, runExperiment } from "./experiment.js";
 export {
   Action, AuditSample, ComparisonPlan, ConfirmatoryComparison, DEVIATIONS, EnvironmentDefinition, Function, Grades, GraderDefinition, Hazard, Label,

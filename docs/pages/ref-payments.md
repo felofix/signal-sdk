@@ -1,14 +1,14 @@
 ---
-title: Payments domain
+title: Payments environment
 group: SDK reference
-summary: signal-sdk/domains/payments — tools, mandate, threats and graders for invoice reconciliation.
+summary: signal-sdk/environments/payments — tools, mandate, threats and graders for invoice reconciliation.
 ---
 
 ```ts
-import { ATTACK_SUITE_VERSION, DEFAULT_THREAT_RATES, LABEL_RULE, Mandate, THREATS, ToolEnvironment, broadMandate,
-         cosmeticVariants, generateBook, generateScenarios, paymentsDomain, reproduceBook } from "signal-sdk/domains/payments";
+import { ATTACK_SUITE_VERSION, DEFAULT_THREAT_RATES, LABEL_RULE, Mandate, THREATS, PaymentTools, broadMandate,
+         cosmeticVariants, generateBook, generateScenarios, paymentsEnvironment, reproduceBook } from "signal-sdk/environments/payments";
 
-paymentsDomain(mandate: Mandate): Domain<ToolEnvironment>
+paymentsEnvironment(mandate: Mandate): Environment<PaymentTools>
 new Mandate({ amountCap: number | string; allowedVendors?: string[]; allowedAccounts?: string[]; escalationConditions?: string[]; currency?: string })
 broadMandate(scenarios: Scenario[], currency = "USD"): Mandate
 generateBook(count: number, { seed = 0, variants = false, vendors = 20, templates = 4, threatRates = DEFAULT_THREAT_RATES }): { distribution, scenarios }
@@ -18,17 +18,17 @@ generateBook(count: number, { seed = 0, variants = false, vendors = 20, template
 
 ```ts
 import { Function, FunctionImplementation, MeasurementConfig, measure } from "signal-sdk";
-import { Mandate, THREATS, generateBook, paymentsDomain, type ToolEnvironment } from "signal-sdk/domains/payments";
+import { Mandate, THREATS, generateBook, paymentsEnvironment, type PaymentTools } from "signal-sdk/environments/payments";
 
 const { distribution, scenarios } = generateBook(80, { seed: 42, vendors: 20, variants: true,
   threatRates: { missing_information: 0.1, bank_detail_change: 0.08, duplicate: 0.06, amount_discrepancy: 0.08, unapproved_vendor: 0.05,
                  tool_fault: 0.05, prompt_injection_document: 0.05, prompt_injection_email: 0.05, prompt_injection_tool_result: 0.05 } });
-const registry = scenarios.flatMap((s) => Object.entries(s.environment.vendor_registry as Record<string, { account?: string }>));
-const domain = paymentsDomain(new Mandate({ amountCap: 1500,
+const registry = scenarios.flatMap((s) => Object.entries(s.state.vendor_registry as Record<string, { account?: string }>));
+const environment = paymentsEnvironment(new Mandate({ amountCap: 1500,
   allowedVendors: [...new Set(registry.map(([v]) => v))], allowedAccounts: [...new Set(registry.map(([, r]) => r.account).filter(Boolean))] as string[],
   escalationConditions: ["duplicate", "unapproved_vendor", "missing_information", "bank_detail_change", "amount_discrepancy"] }));
 
-function agent(context: TrialContext<ToolEnvironment>): string {
+function agent(context: TrialContext<PaymentTools>): string {
   const docs = context.tools.lookupDocuments().documents as Record<string, string>[];
   const invoice = docs.find((d) => d.document_type !== "purchase_order")!;
   const vendor = context.tools.lookupVendor(invoice.vendor).vendor as { account?: string } | null;
@@ -39,7 +39,7 @@ function agent(context: TrialContext<ToolEnvironment>): string {
 
 const consequenceClasses = [...new Set(Object.values(THREATS).map((t) => t.expectedConsequenceClass).filter(Boolean))] as string[];
 const measurement = await measure([new FunctionImplementation(new Function({ name: "agent", implementation: { revision: "1" } }), agent, "simulation")],
-  distribution, scenarios, { domain, config: new MeasurementConfig({ mode: "simulation",
+  distribution, scenarios, { environment, config: new MeasurementConfig({ mode: "simulation",
     severityAssumptions: Object.fromEntries(consequenceClasses.map((c) => [c, { distribution: "fixed", amount: 100, currency: "USD" }])) }) });
 ```
 

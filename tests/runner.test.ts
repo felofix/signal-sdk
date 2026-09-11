@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { compareMeasurements, limitations } from "../src/certificate.js";
-import { RETURN_VALUES } from "../src/domain.js";
-import { generateBook, paymentsDomain } from "../src/domains/payments/index.js";
+import { RETURN_VALUES } from "../src/environment.js";
+import { generateBook, paymentsEnvironment } from "../src/environments/payments/index.js";
 import { add, arithmeticBook, arithmeticDemo, demoDefinition, demoMandate, reconcile } from "../src/examples.js";
 import { ComparisonPlan, ConfirmatoryComparison, Function, MeasurementConfig, ValidityPeriod } from "../src/models.js";
 import { FunctionImplementation, execute, measure } from "../src/runner.js";
@@ -10,25 +10,25 @@ import { cleanScenario, fixtures } from "./fixtures.js";
 
 function payments(count = 2) {
   const { distribution, scenarios } = generateBook(count);
-  return { distribution, scenarios, domain: paymentsDomain(demoMandate(scenarios)) };
+  return { distribution, scenarios, environment: paymentsEnvironment(demoMandate(scenarios)) };
 }
 
 test("a modified generator book is rejected", async () => {
-  const { distribution, scenarios, domain } = payments();
+  const { distribution, scenarios, environment } = payments();
   const changed = scenarios[0].with({ groundState: { payments: [] } });
-  await assert.rejects(measure([new FunctionImplementation(demoDefinition(), reconcile, "simulation")], distribution, [changed, ...scenarios.slice(1)], { domain }), /reproduce/);
+  await assert.rejects(measure([new FunctionImplementation(demoDefinition(), reconcile, "simulation")], distribution, [changed, ...scenarios.slice(1)], { environment }), /reproduce/);
 });
 
-test("a generated book needs a reproducing domain", async () => {
+test("a generated book needs a reproducing environment", async () => {
   const { distribution, scenarios } = payments();
   await assert.rejects(measure([new FunctionImplementation(demoDefinition(), reconcile, "simulation")], distribution, scenarios,
-    { domain: RETURN_VALUES as never, config: new MeasurementConfig({ mode: "simulation" }) }), /datasetDistribution/);
+    { environment: RETURN_VALUES as never, config: new MeasurementConfig({ mode: "simulation" }) }), /datasetDistribution/);
 });
 
 test("modes and kinds must agree", async () => {
-  const { distribution, scenarios, domain } = payments();
-  await assert.rejects(measure([new FunctionImplementation(demoDefinition(), reconcile)], distribution, scenarios, { domain, config: new MeasurementConfig({ mode: "simulation" }) }), /Real functions/);
-  await assert.rejects(measure([new FunctionImplementation(demoDefinition(), reconcile, "simulation")], distribution, scenarios, { domain, config: new MeasurementConfig({ mode: "real" }) }), /Real mode/);
+  const { distribution, scenarios, environment } = payments();
+  await assert.rejects(measure([new FunctionImplementation(demoDefinition(), reconcile)], distribution, scenarios, { environment, config: new MeasurementConfig({ mode: "simulation" }) }), /Real functions/);
+  await assert.rejects(measure([new FunctionImplementation(demoDefinition(), reconcile, "simulation")], distribution, scenarios, { environment, config: new MeasurementConfig({ mode: "real" }) }), /Real mode/);
 });
 
 test("real functions must record a matching provider version", async () => {
@@ -63,7 +63,7 @@ test("controls are added and seeds are paired", async () => {
   }
 });
 
-test("the default domain grades return values and separates its controls", async () => {
+test("the default environment grades return values and separates its controls", async () => {
   const m = await arithmeticDemo(12, 0, 2);
   const byName = Object.fromEntries(m.functions.map((f) => [f.name, f.id]));
   const correct = (name: string) => m.trials.filter((t) => t.functionId === byName[name]).map((t) => t.grades.outcome.correct);

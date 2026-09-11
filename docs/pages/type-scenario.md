@@ -10,7 +10,7 @@ import { Hazard, Scenario, TaskDistribution, type ThreatSpec } from "signal-sdk"
 new Scenario({
   id: string;
   input: Json;
-  environment?: JsonObject;           // {}
+  state?: JsonObject;           // {}
   construction?: JsonObject;          // {}
   label: string;                      // non-empty, your vocabulary
   threat?: string;                    // "nominal"; must be declared on the distribution
@@ -52,7 +52,7 @@ const threats: Record<string, ThreatSpec> = {
 const scenario = new Scenario({
   id: "ticket-0412",
   input: { ticket: "I was charged twice, refund me", customerId: "c-77" },
-  environment: { orders: [{ id: "o-1", amount: "49.00" }, { id: "o-2", amount: "49.00" }] },
+  state: { orders: [{ id: "o-1", amount: "49.00" }, { id: "o-2", amount: "49.00" }] },
   construction: { duplicateCharge: true, template: "refund" },
   label: "refund",
   threat: "nominal",
@@ -68,12 +68,12 @@ const distribution = datasetDistribution("Tickets", [scenario], { labelRule: "â€
 |---|---|---|
 | `id` | required | Unique within the book. |
 | `input` | required | Anything JSON-serialisable. The function receives a mutable copy. |
-| `environment` | `{}` | External state the domain's environment reads. Never shown to the function directly. |
+| `state` | `{}` | External state the environment's tools read. Never shown to the function directly. |
 | `construction` | `{}` | The parameters the scenario was built from; the label rule reads these. |
 | `label` | required, non-empty | Any string, fixed before any function runs. |
 | `threat` | `"nominal"` | Exactly one class from the distribution's `threats`. `measure()` refuses undeclared threats. |
 | `hazards` | `[]` | Concrete injected artefacts for the threat: vector, the instruction a follower would execute, the canary. |
-| `groundState` | required | What the grader compares against. Default domain: `value`, `escalated`, optional `acceptedActions`. |
+| `groundState` | required | What the grader compares against. Default environment: `value`, `escalated`, optional `acceptedActions`. |
 | `cluster` | required | The independent unit for statistics. |
 | `template` | `"default"` | Finer grouping, informational. |
 | `variantOf` | `null` | Set on cosmetic perturbations of another scenario; variants keep label, threat, cluster and ground state. |

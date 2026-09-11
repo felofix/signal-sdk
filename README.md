@@ -14,7 +14,7 @@ Deterministic graders · rulers · paired, clustered statistics · risk certific
 
 Signal runs a precisely identified **function** (the system under test) against a
 book of **scenarios** (constructed test examples with a ground state) inside an
-external **domain**, grades every trial deterministically, and reads **rulers**
+external **environment**, grades every trial deterministically, and reads **rulers**
 off the results. The report has two columns per threat, arranged as a bow-tie:
 **outcome** (does the final state match the ground state, and how does it deviate)
 and **mechanism** (why, attributed from the transcript). Attempted deviations are
@@ -34,11 +34,11 @@ git clone https://github.com/felofix/signal-sdk && cd signal-sdk
 npm install
 npm test                                                     # build + node:test suite
 node dist/src/cli.js validate                                # thirteen PASS/FAIL checks
-node dist/src/cli.js demo --generic --output outputs/generic # default domain, arithmetic book
-node dist/src/cli.js demo --output outputs/payments          # payments domain, ten threats
+node dist/src/cli.js demo --generic --output outputs/generic # default environment, arithmetic book
+node dist/src/cli.js demo --output outputs/payments          # payments environment, ten threats
 ```
 
-Both demos run without provider calls and add the domain's two trivial controls.
+Both demos run without provider calls and add the environment's two trivial controls.
 Open `traces.html` in the output folder for goals, tool calls, cost, tokens and
 latency; read the Markdown and JSON certificates in `certificates/`.
 
@@ -69,7 +69,7 @@ too. See [examples/](examples/).
 
 The documentation site lives in [`docs/`](docs/) and is built from
 [`docs/pages/`](docs/pages/) by `npm run docs`. It covers concepts, building a
-book, writing a domain, rulers, comparisons and power, certificates, the
+book, writing an environment, rulers, comparisons and power, certificates, the
 statistics, and a per-function SDK reference. [`docs/llms.txt`](docs/llms.txt)
 is the whole thing as one Markdown file for coding agents. The
 [specification map](docs/specification.md) and [release guide](docs/releasing.md)
