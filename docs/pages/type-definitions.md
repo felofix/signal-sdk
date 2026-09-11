@@ -5,7 +5,7 @@ summary: The identities of what is external to the function.
 ---
 
 ```ts
-import { EnvironmentDefinition, GraderDefinition } from "signal-sdk";
+import { EnvironmentDefinition, GraderDefinition } from "@felofix/signal-sdk";
 
 new EnvironmentDefinition({
   name?: string;                        // "return-values"

@@ -4,12 +4,12 @@ group: Guides
 summary: Run a LangChain agent as the function under test, with Signal's tools and tracing.
 ---
 
-`signal-sdk/langchain` bridges in both directions without importing LangChain: the environment's tools become LangChain tool descriptors, and a callback object records every model call into the trace. `@langchain/core` is your dependency, not Signal's.
+`@felofix/signal-sdk/langchain` bridges in both directions without importing LangChain: the environment's tools become LangChain tool descriptors, and a callback object records every model call into the trace. `@langchain/core` is your dependency, not Signal's.
 
 ```ts
 import { tool } from "@langchain/core/tools";
-import { asLangChainTools, signalCallbacks } from "signal-sdk/langchain";
-import { TOOL_DESCRIPTIONS, TOOL_SCHEMAS, type PaymentTools } from "signal-sdk/environments/payments";
+import { asLangChainTools, signalCallbacks } from "@felofix/signal-sdk/langchain";
+import { TOOL_DESCRIPTIONS, TOOL_SCHEMAS, type PaymentTools } from "@felofix/signal-sdk/environments/payments";
 
 async function agent(context: TrialContext<PaymentTools>) {
   const tools = asLangChainTools(context.tools, TOOL_DESCRIPTIONS, TOOL_SCHEMAS).map((d) => tool(d.func, d));

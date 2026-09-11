@@ -9,9 +9,9 @@ A measurement yields three artefacts: certificates (one per function), an offlin
 ## Example
 
 ```ts
-import { certificates, exportCertificates, markdown } from "signal-sdk/certificate";
-import { exportHtml, renderTerminal } from "signal-sdk/visualization";
-import { DashboardStore } from "signal-sdk/dashboard";
+import { certificates, exportCertificates, markdown } from "@felofix/signal-sdk/certificate";
+import { exportHtml, renderTerminal } from "@felofix/signal-sdk/visualization";
+import { DashboardStore } from "@felofix/signal-sdk/dashboard";
 
 for (const report of certificates(measurement)) {
   const outcome = report.columns.outcome as { rows: { threat: string; correct: { estimate: number } }[] };

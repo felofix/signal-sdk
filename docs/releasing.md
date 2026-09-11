@@ -1,6 +1,6 @@
 # Release Guide
 
-The package is `signal-sdk` (import `signal-sdk`, binary `signal-sdk`), TypeScript
+The package is `@felofix/signal-sdk` (import `@felofix/signal-sdk`, binary `@felofix/signal-sdk`), TypeScript
 compiled to ESM for Node 20+. Nothing has been published to npm yet. Check name
 availability and the intended npm owner before publishing.
 
@@ -22,8 +22,8 @@ npm pack --dry-run                 # inspect the tarball contents
 CI runs the same on Node 20, 22 and 24. Inspect the actual CI results before
 calling a release compatible across those versions.
 
-Install the tarball in a fresh directory and verify `import "signal-sdk"` works and
-`npx signal-sdk validate` passes. Inspect package contents for accidental
+Install the tarball in a fresh directory and verify `import "@felofix/signal-sdk"` works and
+`npx @felofix/signal-sdk validate` passes. Inspect package contents for accidental
 credentials, outputs, caches or unrelated source; `files` in `package.json` limits
 the tarball to `dist/src`, `README.md` and `LICENSE`.
 

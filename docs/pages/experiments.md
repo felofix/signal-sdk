@@ -10,8 +10,8 @@ An experiment is several functions on the same book, read with the same rulers. 
 
 ```ts
 import { DEFAULT_RULERS, Function, FunctionImplementation, agreementWithGrader, evaluate,
-         interRaterReliability, rate, rateTrials, runExperiment } from "signal-sdk";
-import { add, arithmeticBook } from "signal-sdk/examples";
+         interRaterReliability, rate, rateTrials, runExperiment } from "@felofix/signal-sdk";
+import { add, arithmeticBook } from "@felofix/signal-sdk/examples";
 
 const { distribution, scenarios } = arithmeticBook(24, 0);
 

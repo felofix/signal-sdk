@@ -45,7 +45,7 @@ latency; read the Markdown and JSON certificates in `certificates/`.
 Measuring your own callable takes a book, a `Function` identity and a call:
 
 ```ts
-import { Function, FunctionImplementation, Scenario, datasetDistribution, runExperiment } from "signal-sdk";
+import { Function, FunctionImplementation, Scenario, datasetDistribution, runExperiment } from "@felofix/signal-sdk";
 
 const words = ["signal", "measure", "scenario", "trial", "grader", "loss"];
 const book = words.map((w, i) => new Scenario({
@@ -87,4 +87,4 @@ can be attached as a rater after the fact, and its reliability against the
 deterministic grader is itself a ruler. Severity and future-book predictions
 depend on printed assumptions; insufficient data is reported, not papered over.
 
-**Not yet published to npm.** The package name is `signal-sdk`; see the release guide.
+**Not yet published to npm.** The package name is `@felofix/signal-sdk`; see the release guide.

@@ -4,7 +4,7 @@ group: Get started
 summary: Install from the repository and run the self-validation gate.
 ---
 
-Signal needs Node 20 or newer. It is written in TypeScript, ships as ESM with type declarations, and has no runtime dependencies. The package name is `signal-sdk`; it is not on npm yet, so install from the repository.
+Signal needs Node 20 or newer. It is written in TypeScript, ships as ESM with type declarations, and has no runtime dependencies. The package name is `@felofix/signal-sdk`; it is not on npm yet, so install from the repository.
 
 ## Example
 
@@ -41,18 +41,15 @@ node dist/src/cli.js validate    # thirteen PASS/FAIL checks: statistics, then t
 
 ## Using it from another project
 
-Until the npm release, point a dependency at the repository or a local tarball:
-
 ```sh
-npm pack                                          # in the signal-sdk checkout -> signal-sdk-0.4.0.tgz
-npm install ../signal-sdk/signal-sdk-0.4.0.tgz    # in your project
+npm install @felofix/signal-sdk
 ```
 
 ```ts
-import { measure } from "signal-sdk";
-import { paymentsEnvironment } from "signal-sdk/environments/payments";
-import { certificates } from "signal-sdk/certificate";
-import { summarize } from "signal-sdk/statistics";
+import { measure } from "@felofix/signal-sdk";
+import { paymentsEnvironment } from "@felofix/signal-sdk/environments/payments";
+import { certificates } from "@felofix/signal-sdk/certificate";
+import { summarize } from "@felofix/signal-sdk/statistics";
 ```
 
 ## Scripts

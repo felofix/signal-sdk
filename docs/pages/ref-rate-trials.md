@@ -5,7 +5,7 @@ summary: Attach a rater's verdict to every trial and get a new snapshot.
 ---
 
 ```ts
-import { rateTrials } from "signal-sdk";
+import { rateTrials } from "@felofix/signal-sdk";
 
 rateTrials(
   measurement: Measurement,
@@ -19,7 +19,7 @@ This is how a human panel or a language-model judge enters an experiment: after 
 ## Example
 
 ```ts
-import { agreementWithGrader, evaluate, interRaterReliability, rateTrials } from "signal-sdk";
+import { agreementWithGrader, evaluate, interRaterReliability, rateTrials } from "@felofix/signal-sdk";
 
 async function llmJudge(scenario: Scenario, trial: Trial): Promise<boolean> {
   const response = await client.messages.create({

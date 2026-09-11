@@ -7,7 +7,7 @@ summary: The estimators underneath rulers and certificates, implemented in-repo 
 
 ```ts
 import { calibrate, compare, detectDrift, detectableDifference, difficulty, interval, lossDistribution, robustness,
-         sampleSize, summarize, Rng, normPpf, tPpf, quantile } from "signal-sdk/statistics";
+         sampleSize, summarize, Rng, normPpf, tPpf, quantile } from "@felofix/signal-sdk/statistics";
 
 interval(values: number[], clusters: string[], { alpha = 0.05, samples = 2000, seed = 0, bounds = null }): Estimate
 summarize(rows, { bootstrapSamples = 2000, seed = 0 }): { functions: Record<string, FunctionSummary>, unit, resamplingUnit }
@@ -24,8 +24,8 @@ detectDrift(auditRows, { baselines, alpha = 0.05, expectedShift = 0.1, costUpper
 ## Example
 
 ```ts
-import { observationRows } from "signal-sdk";
-import { compare, difficulty, summarize } from "signal-sdk/statistics";
+import { observationRows } from "@felofix/signal-sdk";
+import { compare, difficulty, summarize } from "@felofix/signal-sdk/statistics";
 
 const rows = observationRows(measurement);
 const summary = summarize(rows, { bootstrapSamples: 1000 });
@@ -46,7 +46,7 @@ console.log(hard.status, hard.predictions[fn.id]?.nextBookCorrectRate);
 | Function | Result |
 |---|---|
 | `interval` | `estimate`, `interval`, `confidence`, `scenarios`, `clusters`, `method`, `zeroEventNote`. Top-cluster bootstrap with cluster-t envelope; conservative guards for degenerate samples. |
-| `summarize` | Per function: `outcome` (correct, fieldF1, attempted/occurred deviation, escalatedWhenImpossible, by label and by threat), `events` (per attempted/occurred key: deviation, mechanisms, mandate_attempt, consequence classes), `process` (+ cost distribution), `consistency` (pass^k, path), `metrics`. The per-threat outcome and mechanism columns are built by `outcomeColumn()` and `mechanismColumn()` from `signal-sdk`. |
+| `summarize` | Per function: `outcome` (correct, fieldF1, attempted/occurred deviation, escalatedWhenImpossible, by label and by threat), `events` (per attempted/occurred key: deviation, mechanisms, mandate_attempt, consequence classes), `process` (+ cost distribution), `consistency` (pass^k, path), `metrics`. The per-threat outcome and mechanism columns are built by `outcomeColumn()` and `mechanismColumn()` from `@felofix/signal-sdk`. |
 | `compare` | Paired scenario differences with Bonferroni family-wise intervals and a `non_inferior` / `not_established` / `exploratory` conclusion per comparison. |
 | `difficulty` | Logistic mixed model `correct ~ function × label + (1|cluster) + (1|scenario) + (1|scenario:function)` fitted by Laplace approximation with Nelder–Mead on the three variance components; leave-function-out difficulty per scenario, label-explained variance, posterior predictions for the next 10,000 scenarios with a width check. Needs 12 scenarios, 2 functions, 4 clusters; dense, so capped at 2,500 coefficients. |
 | `calibrate` | Risk signal versus attempted events; threshold fitted on half the clusters, curves reported on the other half. |

@@ -5,7 +5,7 @@ summary: Measure several functions on one book and read a set of rulers off the 
 ---
 
 ```ts
-import { evaluate, runExperiment } from "signal-sdk";
+import { evaluate, runExperiment } from "@felofix/signal-sdk";
 
 runExperiment(
   name: string,
@@ -33,7 +33,7 @@ evaluate(name: string, measurement: Measurement, rulers?: Ruler[], options?: { b
 ## Example
 
 ```ts
-import { DEFAULT_RULERS, rate, runExperiment } from "signal-sdk";
+import { DEFAULT_RULERS, rate, runExperiment } from "@felofix/signal-sdk";
 
 const experiment = await runExperiment("prompt variants", [baselineImpl, terseImpl, verboseImpl], distribution, book, {
   rulers: [...DEFAULT_RULERS, rate("tokens"), rate("attempts:external_send")],

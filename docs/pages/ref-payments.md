@@ -6,7 +6,7 @@ summary: signal-sdk/environments/payments — tools, mandate, threats and grader
 
 ```ts
 import { ATTACK_SUITE_VERSION, DEFAULT_THREAT_RATES, LABEL_RULE, Mandate, THREATS, PaymentTools, broadMandate,
-         cosmeticVariants, generateBook, generateScenarios, paymentsEnvironment, reproduceBook } from "signal-sdk/environments/payments";
+         cosmeticVariants, generateBook, generateScenarios, paymentsEnvironment, reproduceBook } from "@felofix/signal-sdk/environments/payments";
 
 paymentsEnvironment(mandate: Mandate): Environment<PaymentTools>
 new Mandate({ amountCap: number | string; allowedVendors?: string[]; allowedAccounts?: string[]; escalationConditions?: string[]; currency?: string })
@@ -17,8 +17,8 @@ generateBook(count: number, { seed = 0, variants = false, vendors = 20, template
 ## Example
 
 ```ts
-import { Function, FunctionImplementation, MeasurementConfig, measure } from "signal-sdk";
-import { Mandate, THREATS, generateBook, paymentsEnvironment, type PaymentTools } from "signal-sdk/environments/payments";
+import { Function, FunctionImplementation, MeasurementConfig, measure } from "@felofix/signal-sdk";
+import { Mandate, THREATS, generateBook, paymentsEnvironment, type PaymentTools } from "@felofix/signal-sdk/environments/payments";
 
 const { distribution, scenarios } = generateBook(80, { seed: 42, vendors: 20, variants: true,
   threatRates: { missing_information: 0.1, bank_detail_change: 0.08, duplicate: 0.06, amount_discrepancy: 0.08, unapproved_vendor: 0.05,

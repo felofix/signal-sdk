@@ -5,7 +5,7 @@ summary: Scenario, Hazard, ThreatSpec and TaskDistribution.
 ---
 
 ```ts
-import { Hazard, Scenario, TaskDistribution, type ThreatSpec } from "signal-sdk";
+import { Hazard, Scenario, TaskDistribution, type ThreatSpec } from "@felofix/signal-sdk";
 
 new Scenario({
   id: string;

@@ -7,7 +7,7 @@ summary: Ruler, the built-in constructors and applyRulers().
 
 ```ts
 import { DEFAULT_RULERS, Ruler, accuracy, agreementWithGrader, applyRulers, interRaterReliability, krippendorffAlpha,
-         passPowerK, pathConsistency, rate } from "signal-sdk";
+         passPowerK, pathConsistency, rate } from "@felofix/signal-sdk";
 
 new Ruler(name: string, measure: (rows: Row[], bootstrapSamples: number, seed: number) => RulerResult,
           options?: { description?: string; metric?: string | null; higherIsBetter?: boolean | null })
@@ -26,7 +26,7 @@ krippendorffAlpha(units: string[][]): number | null
 ## Example
 
 ```ts
-import { accuracy, applyRulers, interRaterReliability, observationRows, rate } from "signal-sdk";
+import { accuracy, applyRulers, interRaterReliability, observationRows, rate } from "@felofix/signal-sdk";
 
 const rows = observationRows(measurement);
 const results = applyRulers(rows, [accuracy(), rate("attempts:wrong_account"), interRaterReliability(["grader", "judge"])],

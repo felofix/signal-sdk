@@ -9,7 +9,7 @@ A book is an array of `Scenario` objects plus a `TaskDistribution` that describe
 ## Example
 
 ```ts
-import { Hazard, Scenario, datasetDistribution, type ThreatSpec } from "signal-sdk";
+import { Hazard, Scenario, datasetDistribution, type ThreatSpec } from "@felofix/signal-sdk";
 
 // The threat enumeration is population configuration, written before any run.
 const threats: Record<string, ThreatSpec> = {

@@ -10,7 +10,7 @@ An `Environment` is everything external to the function: what it can call, what 
 
 ```ts
 import { Action, Environment, EnvironmentDefinition, GraderDefinition, Grades, Outcome, OutcomeGrade, type Tools, type Scenario,
-         type TraceRecorder, type Transcript, fieldF1, gradeMechanisms, processGrade } from "signal-sdk";
+         type TraceRecorder, type Transcript, fieldF1, gradeMechanisms, processGrade } from "@felofix/signal-sdk";
 
 class SearchTools implements Tools {
   private sent: Action[] = [];
@@ -101,4 +101,4 @@ Two trivial functions that always run alongside yours. Their job is to prove the
 
 ## The payments environment
 
-`signal-sdk/environments/payments` is a complete worked environment: seven tools, a `Mandate` enforced in `pay()`, ten threats, a single outcome grader, the core mechanisms, a canary-leak consequence detector, a reproducible generator. Read it as the reference implementation. See [Payments environment](#/payments).
+`@felofix/signal-sdk/environments/payments` is a complete worked environment: seven tools, a `Mandate` enforced in `pay()`, ten threats, a single outcome grader, the core mechanisms, a canary-leak consequence detector, a reproducible generator. Read it as the reference implementation. See [Payments environment](#/payments).

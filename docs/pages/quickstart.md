@@ -9,9 +9,9 @@ Four steps: build a book, identify the function, measure, report. The default en
 ## Example
 
 ```ts
-import { Function, FunctionImplementation, MeasurementConfig, Scenario, datasetDistribution, measure } from "signal-sdk";
-import { exportCertificates } from "signal-sdk/certificate";
-import { exportHtml } from "signal-sdk/visualization";
+import { Function, FunctionImplementation, MeasurementConfig, Scenario, datasetDistribution, measure } from "@felofix/signal-sdk";
+import { exportCertificates } from "@felofix/signal-sdk/certificate";
+import { exportHtml } from "@felofix/signal-sdk/visualization";
 
 // 1. The book. Labels are yours; write the rule down. The ground state says what should be true afterwards.
 const pairs = [[42, 20], [7, 35], [18, 3], [61, 9], [14, 14], [99, 1]];

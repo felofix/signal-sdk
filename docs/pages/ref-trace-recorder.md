@@ -5,7 +5,7 @@ summary: Records every step of a trial; environments write to it, graders read f
 ---
 
 ```ts
-import { TraceRecorder } from "signal-sdk";
+import { TraceRecorder } from "@felofix/signal-sdk";
 
 const trace = new TraceRecorder();
 trace.goal<T>(name: string, block: () => T): T                    // sync or async block

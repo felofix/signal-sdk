@@ -5,7 +5,7 @@ summary: Environment, graders and controls bundled for a kind of task.
 ---
 
 ```ts
-import { Environment, RETURN_VALUES, ReturnValueTools, fieldF1, processGrade } from "signal-sdk";
+import { Environment, RETURN_VALUES, ReturnValueTools, fieldF1, processGrade } from "@felofix/signal-sdk";
 
 new Environment<T>({
   definition: EnvironmentDefinition;
@@ -20,7 +20,7 @@ new Environment<T>({
 ## Example
 
 ```ts
-import { Environment, GraderDefinition, Grades, OutcomeGrade, RETURN_VALUES, ReturnValueTools, fieldF1, gradeMechanisms, processGrade } from "signal-sdk";
+import { Environment, GraderDefinition, Grades, OutcomeGrade, RETURN_VALUES, ReturnValueTools, fieldF1, gradeMechanisms, processGrade } from "@felofix/signal-sdk";
 
 const JSON_EXTRACTION = new Environment<ReturnValueTools>({
   definition: RETURN_VALUES.definition.with({ name: "json-extraction" }),

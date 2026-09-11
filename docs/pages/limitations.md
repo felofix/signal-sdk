@@ -24,7 +24,7 @@ Every certificate carries a limitations section derived from the actual configur
 ## Example
 
 ```ts
-import { limitations } from "signal-sdk/certificate";
+import { limitations } from "@felofix/signal-sdk/certificate";
 
 for (const line of limitations(measurement, fn.id)) console.log("-", line);
 ```

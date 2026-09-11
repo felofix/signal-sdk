@@ -39,7 +39,7 @@ explorer, terminal view and local API. No framework dependency is included.
 | Pre/post report | Same scenarios/seeds, bound plan, paired results and both certificates | Different IDs are called different functions. |
 | Generated limitations | Distribution/period/suite/severity/provider-update facts | A provider version change invalidates the measurement. |
 | Numerics | `src/statistics/`: seeded xoshiro RNG, distributions, Cholesky | Hand-rolled and tested in-repo; no numeric library to trust. |
-| Framework and environment neutrality | Callable, `TraceRecorder`, `Environment` protocol | No runtime dependency; `signal-sdk/langchain` is a dependency-free bridge (tool descriptors and a callback object). The core has no notion of documents or payments. |
+| Framework and environment neutrality | Callable, `TraceRecorder`, `Environment` protocol | No runtime dependency; `@felofix/signal-sdk/langchain` is a dependency-free bridge (tool descriptors and a callback object). The core has no notion of documents or payments. |
 
 A release artifact is not an underwriting approval. No real model was measured as
 part of the included demonstrations.

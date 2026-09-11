@@ -11,7 +11,7 @@ Nothing about an environment lives in the core. Documents, payments, tool schema
 ## Example
 
 ```ts
-import { Function, FunctionImplementation, Scenario, datasetDistribution, runExperiment } from "signal-sdk";
+import { Function, FunctionImplementation, Scenario, datasetDistribution, runExperiment } from "@felofix/signal-sdk";
 
 const words = ["signal", "measure", "scenario", "trial", "grader", "loss"];
 const book = words.map((w, i) => new Scenario({

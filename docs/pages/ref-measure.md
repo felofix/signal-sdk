@@ -5,7 +5,7 @@ summary: Run the full crossing of functions × scenarios × repetitions and retu
 ---
 
 ```ts
-import { measure } from "signal-sdk";
+import { measure } from "@felofix/signal-sdk";
 
 measure(
   functions: FunctionImplementation[],
@@ -25,8 +25,8 @@ Runs the self-validation gate, verifies the book against its distribution, adds 
 ## Example
 
 ```ts
-import { Function, FunctionImplementation, MeasurementConfig, measure } from "signal-sdk";
-import { Mandate, generateBook, paymentsEnvironment } from "signal-sdk/environments/payments";
+import { Function, FunctionImplementation, MeasurementConfig, measure } from "@felofix/signal-sdk";
+import { Mandate, generateBook, paymentsEnvironment } from "@felofix/signal-sdk/environments/payments";
 
 const { distribution, scenarios } = generateBook(48, { seed: 7, vendors: 16, variants: true });
 const environment = paymentsEnvironment(new Mandate({ amountCap: 1500, allowedVendors, allowedAccounts,

@@ -1,4 +1,4 @@
-# Signal SDK 0.5.0
+# Signal SDK 0.6.0
 
 Documentation for the Signal SDK, a statistical measuring instrument for agent systems (TypeScript, Node 20+).
 Repository: https://github.com/felofix/signal-sdk
@@ -14,7 +14,7 @@ Nothing about an environment lives in the core. Documents, payments, tool schema
 ## Example
 
 ```ts
-import { Function, FunctionImplementation, Scenario, datasetDistribution, runExperiment } from "signal-sdk";
+import { Function, FunctionImplementation, Scenario, datasetDistribution, runExperiment } from "@felofix/signal-sdk";
 
 const words = ["signal", "measure", "scenario", "trial", "grader", "loss"];
 const book = words.map((w, i) => new Scenario({
@@ -58,7 +58,7 @@ There is no language model grading anything inside the SDK. A judge can be attac
 
 _Get started · Install from the repository and run the self-validation gate._
 
-Signal needs Node 20 or newer. It is written in TypeScript, ships as ESM with type declarations, and has no runtime dependencies. The package name is `signal-sdk`; it is not on npm yet, so install from the repository.
+Signal needs Node 20 or newer. It is written in TypeScript, ships as ESM with type declarations, and has no runtime dependencies. The package name is `@felofix/signal-sdk`; it is not on npm yet, so install from the repository.
 
 ## Example
 
@@ -95,18 +95,15 @@ node dist/src/cli.js validate    # thirteen PASS/FAIL checks: statistics, then t
 
 ## Using it from another project
 
-Until the npm release, point a dependency at the repository or a local tarball:
-
 ```sh
-npm pack                                          # in the signal-sdk checkout -> signal-sdk-0.4.0.tgz
-npm install ../signal-sdk/signal-sdk-0.4.0.tgz    # in your project
+npm install @felofix/signal-sdk
 ```
 
 ```ts
-import { measure } from "signal-sdk";
-import { paymentsEnvironment } from "signal-sdk/environments/payments";
-import { certificates } from "signal-sdk/certificate";
-import { summarize } from "signal-sdk/statistics";
+import { measure } from "@felofix/signal-sdk";
+import { paymentsEnvironment } from "@felofix/signal-sdk/environments/payments";
+import { certificates } from "@felofix/signal-sdk/certificate";
+import { summarize } from "@felofix/signal-sdk/statistics";
 ```
 
 ## Scripts
@@ -127,9 +124,9 @@ Four steps: build a book, identify the function, measure, report. The default en
 ## Example
 
 ```ts
-import { Function, FunctionImplementation, MeasurementConfig, Scenario, datasetDistribution, measure } from "signal-sdk";
-import { exportCertificates } from "signal-sdk/certificate";
-import { exportHtml } from "signal-sdk/visualization";
+import { Function, FunctionImplementation, MeasurementConfig, Scenario, datasetDistribution, measure } from "@felofix/signal-sdk";
+import { exportCertificates } from "@felofix/signal-sdk/certificate";
+import { exportHtml } from "@felofix/signal-sdk/visualization";
 
 // 1. The book. Labels are yours; write the rule down. The ground state says what should be true afterwards.
 const pairs = [[42, 20], [7, 35], [18, 3], [61, 9], [14, 14], [99, 1]];
@@ -200,8 +197,8 @@ An experiment is several functions on the same book, read with the same rulers. 
 
 ```ts
 import { DEFAULT_RULERS, Function, FunctionImplementation, agreementWithGrader, evaluate,
-         interRaterReliability, rate, rateTrials, runExperiment } from "signal-sdk";
-import { add, arithmeticBook } from "signal-sdk/examples";
+         interRaterReliability, rate, rateTrials, runExperiment } from "@felofix/signal-sdk";
+import { add, arithmeticBook } from "@felofix/signal-sdk/examples";
 
 const { distribution, scenarios } = arithmeticBook(24, 0);
 
@@ -301,7 +298,7 @@ A book is an array of `Scenario` objects plus a `TaskDistribution` that describe
 ## Example
 
 ```ts
-import { Hazard, Scenario, datasetDistribution, type ThreatSpec } from "signal-sdk";
+import { Hazard, Scenario, datasetDistribution, type ThreatSpec } from "@felofix/signal-sdk";
 
 // The threat enumeration is population configuration, written before any run.
 const threats: Record<string, ThreatSpec> = {
@@ -369,7 +366,7 @@ An `Environment` is everything external to the function: what it can call, what 
 
 ```ts
 import { Action, Environment, EnvironmentDefinition, GraderDefinition, Grades, Outcome, OutcomeGrade, type Tools, type Scenario,
-         type TraceRecorder, type Transcript, fieldF1, gradeMechanisms, processGrade } from "signal-sdk";
+         type TraceRecorder, type Transcript, fieldF1, gradeMechanisms, processGrade } from "@felofix/signal-sdk";
 
 class SearchTools implements Tools {
   private sent: Action[] = [];
@@ -460,18 +457,18 @@ Two trivial functions that always run alongside yours. Their job is to prove the
 
 ## The payments environment
 
-`signal-sdk/environments/payments` is a complete worked environment: seven tools, a `Mandate` enforced in `pay()`, ten threats, a single outcome grader, the core mechanisms, a canary-leak consequence detector, a reproducible generator. Read it as the reference implementation. See [Payments environment](#/payments).
+`@felofix/signal-sdk/environments/payments` is a complete worked environment: seven tools, a `Mandate` enforced in `pay()`, ten threats, a single outcome grader, the core mechanisms, a canary-leak consequence detector, a reproducible generator. Read it as the reference implementation. See [Payments environment](#/payments).
 
 ## LangChain
 
 _Guides · Run a LangChain agent as the function under test, with Signal's tools and tracing._
 
-`signal-sdk/langchain` bridges in both directions without importing LangChain: the environment's tools become LangChain tool descriptors, and a callback object records every model call into the trace. `@langchain/core` is your dependency, not Signal's.
+`@felofix/signal-sdk/langchain` bridges in both directions without importing LangChain: the environment's tools become LangChain tool descriptors, and a callback object records every model call into the trace. `@langchain/core` is your dependency, not Signal's.
 
 ```ts
 import { tool } from "@langchain/core/tools";
-import { asLangChainTools, signalCallbacks } from "signal-sdk/langchain";
-import { TOOL_DESCRIPTIONS, TOOL_SCHEMAS, type PaymentTools } from "signal-sdk/environments/payments";
+import { asLangChainTools, signalCallbacks } from "@felofix/signal-sdk/langchain";
+import { TOOL_DESCRIPTIONS, TOOL_SCHEMAS, type PaymentTools } from "@felofix/signal-sdk/environments/payments";
 
 async function agent(context: TrialContext<PaymentTools>) {
   const tools = asLangChainTools(context.tools, TOOL_DESCRIPTIONS, TOOL_SCHEMAS).map((d) => tool(d.func, d));
@@ -504,8 +501,8 @@ A grader judges one trial. A ruler turns the rows of many trials into one number
 ## Example
 
 ```ts
-import { DEFAULT_RULERS, Ruler, accuracy, agreementWithGrader, interRaterReliability, passPowerK, pathConsistency, rate } from "signal-sdk";
-import { interval, scenarioGroups } from "signal-sdk/statistics";
+import { DEFAULT_RULERS, Ruler, accuracy, agreementWithGrader, interRaterReliability, passPowerK, pathConsistency, rate } from "@felofix/signal-sdk";
+import { interval, scenarioGroups } from "@felofix/signal-sdk/statistics";
 
 const rulers = [
   accuracy(),                          // correct final state
@@ -561,9 +558,9 @@ Exploratory comparisons come free with every experiment. A comparison that decid
 ## Example
 
 ```ts
-import { ComparisonPlan, ConfirmatoryComparison, MeasurementConfig, measure } from "signal-sdk";
-import { compareMeasurements } from "signal-sdk/certificate";
-import { detectableDifference, sampleSize } from "signal-sdk/statistics";
+import { ComparisonPlan, ConfirmatoryComparison, MeasurementConfig, measure } from "@felofix/signal-sdk";
+import { compareMeasurements } from "@felofix/signal-sdk/certificate";
+import { detectableDifference, sampleSize } from "@felofix/signal-sdk/statistics";
 
 // Plan the book before running.
 console.log(sampleSize(1000, 2, { clusterSize: 10, icc: 0.2, comparisons: 2 }));
@@ -614,9 +611,9 @@ A measurement yields three artefacts: certificates (one per function), an offlin
 ## Example
 
 ```ts
-import { certificates, exportCertificates, markdown } from "signal-sdk/certificate";
-import { exportHtml, renderTerminal } from "signal-sdk/visualization";
-import { DashboardStore } from "signal-sdk/dashboard";
+import { certificates, exportCertificates, markdown } from "@felofix/signal-sdk/certificate";
+import { exportHtml, renderTerminal } from "@felofix/signal-sdk/visualization";
+import { DashboardStore } from "@felofix/signal-sdk/dashboard";
 
 for (const report of certificates(measurement)) {
   const outcome = report.columns.outcome as { rows: { threat: string; correct: { estimate: number } }[] };
@@ -954,7 +951,7 @@ Every certificate carries a limitations section derived from the actual configur
 ## Example
 
 ```ts
-import { limitations } from "signal-sdk/certificate";
+import { limitations } from "@felofix/signal-sdk/certificate";
 
 for (const line of limitations(measurement, fn.id)) console.log("-", line);
 ```
@@ -975,7 +972,7 @@ for (const line of limitations(measurement, fn.id)) console.log("-", line);
 _SDK reference · Run the full crossing of functions × scenarios × repetitions and return an immutable Measurement._
 
 ```ts
-import { measure } from "signal-sdk";
+import { measure } from "@felofix/signal-sdk";
 
 measure(
   functions: FunctionImplementation[],
@@ -995,8 +992,8 @@ Runs the self-validation gate, verifies the book against its distribution, adds 
 ## Example
 
 ```ts
-import { Function, FunctionImplementation, MeasurementConfig, measure } from "signal-sdk";
-import { Mandate, generateBook, paymentsEnvironment } from "signal-sdk/environments/payments";
+import { Function, FunctionImplementation, MeasurementConfig, measure } from "@felofix/signal-sdk";
+import { Mandate, generateBook, paymentsEnvironment } from "@felofix/signal-sdk/environments/payments";
 
 const { distribution, scenarios } = generateBook(48, { seed: 7, vendors: 16, variants: true });
 const environment = paymentsEnvironment(new Mandate({ amountCap: 1500, allowedVendors, allowedAccounts,
@@ -1044,7 +1041,7 @@ A promise of an immutable `Measurement`. Its `id` is the SHA-256 of its content;
 _SDK reference · Measure several functions on one book and read a set of rulers off the result._
 
 ```ts
-import { evaluate, runExperiment } from "signal-sdk";
+import { evaluate, runExperiment } from "@felofix/signal-sdk";
 
 runExperiment(
   name: string,
@@ -1072,7 +1069,7 @@ evaluate(name: string, measurement: Measurement, rulers?: Ruler[], options?: { b
 ## Example
 
 ```ts
-import { DEFAULT_RULERS, rate, runExperiment } from "signal-sdk";
+import { DEFAULT_RULERS, rate, runExperiment } from "@felofix/signal-sdk";
 
 const experiment = await runExperiment("prompt variants", [baselineImpl, terseImpl, verboseImpl], distribution, book, {
   rulers: [...DEFAULT_RULERS, rate("tokens"), rate("attempts:external_send")],
@@ -1121,7 +1118,7 @@ Rulers whose metric is missing on some trial (unreported `cost`, an absent `metr
 _SDK reference · Attach a rater's verdict to every trial and get a new snapshot._
 
 ```ts
-import { rateTrials } from "signal-sdk";
+import { rateTrials } from "@felofix/signal-sdk";
 
 rateTrials(
   measurement: Measurement,
@@ -1135,7 +1132,7 @@ This is how a human panel or a language-model judge enters an experiment: after 
 ## Example
 
 ```ts
-import { agreementWithGrader, evaluate, interRaterReliability, rateTrials } from "signal-sdk";
+import { agreementWithGrader, evaluate, interRaterReliability, rateTrials } from "@felofix/signal-sdk";
 
 async function llmJudge(scenario: Scenario, trial: Trial): Promise<boolean> {
   const response = await client.messages.create({
@@ -1179,7 +1176,7 @@ Ratings are experimental evidence, not graders. They never enter the outcome or 
 _SDK reference · Bind a hand-built book by the hash of its complete content._
 
 ```ts
-import { datasetDistribution } from "signal-sdk";
+import { datasetDistribution } from "@felofix/signal-sdk";
 
 datasetDistribution(
   name: string,
@@ -1223,14 +1220,14 @@ A `TaskDistribution` with `datasetHash` set. `measure()` recomputes the hash and
 
 ## Notes
 
-For generated books use the environment's generator (for example `generateBook` from `signal-sdk/environments/payments`), which binds parameters and seed and lets the runner regenerate the book to verify it.
+For generated books use the environment's generator (for example `generateBook` from `@felofix/signal-sdk/environments/payments`), which binds parameters and seed and lets the runner regenerate the book to verify it.
 
 ## Function
 
 _SDK reference · The identity of the system under test._
 
 ```ts
-import { Function, ModelIdentity } from "signal-sdk";
+import { Function, ModelIdentity } from "@felofix/signal-sdk";
 
 new Function({
   implementation: Record<string, Json>;             // required, non-empty
@@ -1297,7 +1294,7 @@ Per-model prompts and configuration for systems of interacting models are not ye
 _SDK reference · A Function identity paired with the callable that runs it._
 
 ```ts
-import { FunctionImplementation, type TrialContext } from "signal-sdk";
+import { FunctionImplementation, type TrialContext } from "@felofix/signal-sdk";
 
 new FunctionImplementation<Tools>(
   definition: Function,
@@ -1356,7 +1353,7 @@ The function never sees labels or ground states. `kind: "real"` trials must reco
 _SDK reference · Environment, graders and controls bundled for a kind of task._
 
 ```ts
-import { Environment, RETURN_VALUES, ReturnValueTools, fieldF1, processGrade } from "signal-sdk";
+import { Environment, RETURN_VALUES, ReturnValueTools, fieldF1, processGrade } from "@felofix/signal-sdk";
 
 new Environment<T>({
   definition: EnvironmentDefinition;
@@ -1371,7 +1368,7 @@ new Environment<T>({
 ## Example
 
 ```ts
-import { Environment, GraderDefinition, Grades, OutcomeGrade, RETURN_VALUES, ReturnValueTools, fieldF1, gradeMechanisms, processGrade } from "signal-sdk";
+import { Environment, GraderDefinition, Grades, OutcomeGrade, RETURN_VALUES, ReturnValueTools, fieldF1, gradeMechanisms, processGrade } from "@felofix/signal-sdk";
 
 const JSON_EXTRACTION = new Environment<ReturnValueTools>({
   definition: RETURN_VALUES.definition.with({ name: "json-extraction" }),
@@ -1424,7 +1421,7 @@ The default environment. `ReturnValueTools` exposes `input`, `escalate(reason?)`
 _SDK reference · Records every step of a trial; environments write to it, graders read from it._
 
 ```ts
-import { TraceRecorder } from "signal-sdk";
+import { TraceRecorder } from "@felofix/signal-sdk";
 
 const trace = new TraceRecorder();
 trace.goal<T>(name: string, block: () => T): T                    // sync or async block
@@ -1482,7 +1479,7 @@ _SDK reference · Ruler, the built-in constructors and applyRulers()._
 
 ```ts
 import { DEFAULT_RULERS, Ruler, accuracy, agreementWithGrader, applyRulers, interRaterReliability, krippendorffAlpha,
-         passPowerK, pathConsistency, rate } from "signal-sdk";
+         passPowerK, pathConsistency, rate } from "@felofix/signal-sdk";
 
 new Ruler(name: string, measure: (rows: Row[], bootstrapSamples: number, seed: number) => RulerResult,
           options?: { description?: string; metric?: string | null; higherIsBetter?: boolean | null })
@@ -1501,7 +1498,7 @@ krippendorffAlpha(units: string[][]): number | null
 ## Example
 
 ```ts
-import { accuracy, applyRulers, interRaterReliability, observationRows, rate } from "signal-sdk";
+import { accuracy, applyRulers, interRaterReliability, observationRows, rate } from "@felofix/signal-sdk";
 
 const rows = observationRows(measurement);
 const results = applyRulers(rows, [accuracy(), rate("attempts:wrong_account"), interRaterReliability(["grader", "judge"])],
@@ -1546,7 +1543,7 @@ console.log(results.accuracy);
 _SDK reference · certificates(), markdown(), exportCertificates(), compareMeasurements(), limitations()._
 
 ```ts
-import { RiskCertificate, certificates, compareMeasurements, exportCertificates, limitations, markdown } from "signal-sdk/certificate";
+import { RiskCertificate, certificates, compareMeasurements, exportCertificates, limitations, markdown } from "@felofix/signal-sdk/certificate";
 
 certificates(measurement: Measurement): RiskCertificate[]
 markdown(certificate: RiskCertificate): string
@@ -1559,7 +1556,7 @@ limitations(measurement: Measurement, functionId: string): string[]
 
 ```ts
 import { writeFileSync } from "node:fs";
-import { certificates, markdown } from "signal-sdk/certificate";
+import { certificates, markdown } from "@felofix/signal-sdk/certificate";
 
 for (const report of certificates(measurement)) {
   console.log(report.functionId.slice(0, 12), report.status);
@@ -1602,8 +1599,8 @@ The generated limitations list for one function, built from the configuration: i
 _SDK reference · exportHtml(), renderTerminal(), DashboardStore and createApp()._
 
 ```ts
-import { buildFlamegraphData, exportHtml, htmlDocument, renderTerminal } from "signal-sdk/visualization";
-import { DashboardStore, createApp } from "signal-sdk/dashboard";
+import { buildFlamegraphData, exportHtml, htmlDocument, renderTerminal } from "@felofix/signal-sdk/visualization";
+import { DashboardStore, createApp } from "@felofix/signal-sdk/dashboard";
 
 htmlDocument(measurement: Measurement): string
 exportHtml(measurement: Measurement, path: string): string
@@ -1623,8 +1620,8 @@ createApp(dataDir: string | null = null): { store, handle(req, res), listen(port
 ## Example
 
 ```ts
-import { exportHtml } from "signal-sdk/visualization";
-import { DashboardStore, createApp } from "signal-sdk/dashboard";
+import { exportHtml } from "@felofix/signal-sdk/visualization";
+import { DashboardStore, createApp } from "@felofix/signal-sdk/dashboard";
 
 exportHtml(measurement, "outputs/traces.html");
 new DashboardStore("outputs/store").put(measurement);
@@ -1666,7 +1663,7 @@ _SDK reference · The estimators underneath rulers and certificates, implemented
 
 ```ts
 import { calibrate, compare, detectDrift, detectableDifference, difficulty, interval, lossDistribution, robustness,
-         sampleSize, summarize, Rng, normPpf, tPpf, quantile } from "signal-sdk/statistics";
+         sampleSize, summarize, Rng, normPpf, tPpf, quantile } from "@felofix/signal-sdk/statistics";
 
 interval(values: number[], clusters: string[], { alpha = 0.05, samples = 2000, seed = 0, bounds = null }): Estimate
 summarize(rows, { bootstrapSamples = 2000, seed = 0 }): { functions: Record<string, FunctionSummary>, unit, resamplingUnit }
@@ -1683,8 +1680,8 @@ detectDrift(auditRows, { baselines, alpha = 0.05, expectedShift = 0.1, costUpper
 ## Example
 
 ```ts
-import { observationRows } from "signal-sdk";
-import { compare, difficulty, summarize } from "signal-sdk/statistics";
+import { observationRows } from "@felofix/signal-sdk";
+import { compare, difficulty, summarize } from "@felofix/signal-sdk/statistics";
 
 const rows = observationRows(measurement);
 const summary = summarize(rows, { bootstrapSamples: 1000 });
@@ -1705,7 +1702,7 @@ console.log(hard.status, hard.predictions[fn.id]?.nextBookCorrectRate);
 | Function | Result |
 |---|---|
 | `interval` | `estimate`, `interval`, `confidence`, `scenarios`, `clusters`, `method`, `zeroEventNote`. Top-cluster bootstrap with cluster-t envelope; conservative guards for degenerate samples. |
-| `summarize` | Per function: `outcome` (correct, fieldF1, attempted/occurred deviation, escalatedWhenImpossible, by label and by threat), `events` (per attempted/occurred key: deviation, mechanisms, mandate_attempt, consequence classes), `process` (+ cost distribution), `consistency` (pass^k, path), `metrics`. The per-threat outcome and mechanism columns are built by `outcomeColumn()` and `mechanismColumn()` from `signal-sdk`. |
+| `summarize` | Per function: `outcome` (correct, fieldF1, attempted/occurred deviation, escalatedWhenImpossible, by label and by threat), `events` (per attempted/occurred key: deviation, mechanisms, mandate_attempt, consequence classes), `process` (+ cost distribution), `consistency` (pass^k, path), `metrics`. The per-threat outcome and mechanism columns are built by `outcomeColumn()` and `mechanismColumn()` from `@felofix/signal-sdk`. |
 | `compare` | Paired scenario differences with Bonferroni family-wise intervals and a `non_inferior` / `not_established` / `exploratory` conclusion per comparison. |
 | `difficulty` | Logistic mixed model `correct ~ function × label + (1|cluster) + (1|scenario) + (1|scenario:function)` fitted by Laplace approximation with Nelder–Mead on the three variance components; leave-function-out difficulty per scenario, label-explained variance, posterior predictions for the next 10,000 scenarios with a width check. Needs 12 scenarios, 2 functions, 4 clusters; dense, so capped at 2,500 coefficients. |
 | `calibrate` | Risk signal versus attempted events; threshold fitted on half the clusters, curves reported on the other half. |
@@ -1726,7 +1723,7 @@ _SDK reference · signal-sdk/environments/payments — tools, mandate, threats a
 
 ```ts
 import { ATTACK_SUITE_VERSION, DEFAULT_THREAT_RATES, LABEL_RULE, Mandate, THREATS, PaymentTools, broadMandate,
-         cosmeticVariants, generateBook, generateScenarios, paymentsEnvironment, reproduceBook } from "signal-sdk/environments/payments";
+         cosmeticVariants, generateBook, generateScenarios, paymentsEnvironment, reproduceBook } from "@felofix/signal-sdk/environments/payments";
 
 paymentsEnvironment(mandate: Mandate): Environment<PaymentTools>
 new Mandate({ amountCap: number | string; allowedVendors?: string[]; allowedAccounts?: string[]; escalationConditions?: string[]; currency?: string })
@@ -1737,8 +1734,8 @@ generateBook(count: number, { seed = 0, variants = false, vendors = 20, template
 ## Example
 
 ```ts
-import { Function, FunctionImplementation, MeasurementConfig, measure } from "signal-sdk";
-import { Mandate, THREATS, generateBook, paymentsEnvironment, type PaymentTools } from "signal-sdk/environments/payments";
+import { Function, FunctionImplementation, MeasurementConfig, measure } from "@felofix/signal-sdk";
+import { Mandate, THREATS, generateBook, paymentsEnvironment, type PaymentTools } from "@felofix/signal-sdk/environments/payments";
 
 const { distribution, scenarios } = generateBook(80, { seed: 42, vendors: 20, variants: true,
   threatRates: { missing_information: 0.1, bank_detail_change: 0.08, duplicate: 0.06, amount_discrepancy: 0.08, unapproved_vendor: 0.05,
@@ -1823,7 +1820,7 @@ signal-sdk power     --margin <currency per 10,000> --paired-sd <currency> [--cl
 signal-sdk dashboard [--data outputs/store] [--host 127.0.0.1] [--port 8080]
 ```
 
-From a checkout the binary is `node dist/src/cli.js`; once installed from npm it is `signal-sdk` (or `npx signal-sdk`).
+From a checkout the binary is `node dist/src/cli.js`; once installed from npm it is `@felofix/signal-sdk` (or `npx @felofix/signal-sdk`).
 
 ## Example
 
@@ -1860,7 +1857,7 @@ No command calls a provider. Invalid inputs exit with status 1 and a one-line re
 _Types · Scenario, Hazard, ThreatSpec and TaskDistribution._
 
 ```ts
-import { Hazard, Scenario, TaskDistribution, type ThreatSpec } from "signal-sdk";
+import { Hazard, Scenario, TaskDistribution, type ThreatSpec } from "@felofix/signal-sdk";
 
 new Scenario({
   id: string;
@@ -1948,7 +1945,7 @@ Exactly one of `generator` (+ `seed`, `parameters`) or `datasetHash` must be set
 _Types · Measurement, MeasurementConfig, ConfirmatoryComparison, ComparisonPlan, ValidityPeriod._
 
 ```ts
-import { ComparisonPlan, ConfirmatoryComparison, Measurement, MeasurementConfig, ValidityPeriod } from "signal-sdk";
+import { ComparisonPlan, ConfirmatoryComparison, Measurement, MeasurementConfig, ValidityPeriod } from "@felofix/signal-sdk";
 
 new MeasurementConfig({
   repetitions?: number;                 // 3, at least 2
@@ -2018,7 +2015,7 @@ Per consequence class: `{ distribution?: "fixed" | "gamma" | "lognormal", amount
 _Types · Grades, OutcomeGrade, MechanismGrade, ProcessGrade, Outcome, Action, Transcript, Step, Message, Trial._
 
 ```ts
-import { Action, Grades, MechanismGrade, Message, Outcome, OutcomeGrade, ProcessGrade, Step, Transcript, Trial } from "signal-sdk";
+import { Action, Grades, MechanismGrade, Message, Outcome, OutcomeGrade, ProcessGrade, Step, Transcript, Trial } from "@felofix/signal-sdk";
 
 new Grades({ outcome: OutcomeGrade; mechanism?: MechanismGrade; consequences?: Record<string, boolean>; process: ProcessGrade;
              metrics?: Record<string, number>; ratings?: JsonObject })
@@ -2077,7 +2074,7 @@ What the environment says happened. `value` is the return value (the outcome its
 _Types · The identities of what is external to the function._
 
 ```ts
-import { EnvironmentDefinition, GraderDefinition } from "signal-sdk";
+import { EnvironmentDefinition, GraderDefinition } from "@felofix/signal-sdk";
 
 new EnvironmentDefinition({
   name?: string;                        // "return-values"

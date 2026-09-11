@@ -9,8 +9,8 @@ A grader judges one trial. A ruler turns the rows of many trials into one number
 ## Example
 
 ```ts
-import { DEFAULT_RULERS, Ruler, accuracy, agreementWithGrader, interRaterReliability, passPowerK, pathConsistency, rate } from "signal-sdk";
-import { interval, scenarioGroups } from "signal-sdk/statistics";
+import { DEFAULT_RULERS, Ruler, accuracy, agreementWithGrader, interRaterReliability, passPowerK, pathConsistency, rate } from "@felofix/signal-sdk";
+import { interval, scenarioGroups } from "@felofix/signal-sdk/statistics";
 
 const rulers = [
   accuracy(),                          // correct final state

@@ -1,6 +1,6 @@
 {
-  "name": "signal-sdk",
-  "version": "0.5.0",
+  "name": "@felofix/signal-sdk",
+  "version": "0.6.0",
   "description": "A statistical measuring instrument for agent systems: deterministic graders, rulers, paired and clustered statistics, risk certificates.",
   "type": "module",
   "license": "MIT",

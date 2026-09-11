@@ -13,7 +13,7 @@ signal-sdk power     --margin <currency per 10,000> --paired-sd <currency> [--cl
 signal-sdk dashboard [--data outputs/store] [--host 127.0.0.1] [--port 8080]
 ```
 
-From a checkout the binary is `node dist/src/cli.js`; once installed from npm it is `signal-sdk` (or `npx signal-sdk`).
+From a checkout the binary is `node dist/src/cli.js`; once installed from npm it is `@felofix/signal-sdk` (or `npx @felofix/signal-sdk`).
 
 ## Example
 

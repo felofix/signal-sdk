@@ -5,8 +5,8 @@ summary: exportHtml(), renderTerminal(), DashboardStore and createApp().
 ---
 
 ```ts
-import { buildFlamegraphData, exportHtml, htmlDocument, renderTerminal } from "signal-sdk/visualization";
-import { DashboardStore, createApp } from "signal-sdk/dashboard";
+import { buildFlamegraphData, exportHtml, htmlDocument, renderTerminal } from "@felofix/signal-sdk/visualization";
+import { DashboardStore, createApp } from "@felofix/signal-sdk/dashboard";
 
 htmlDocument(measurement: Measurement): string
 exportHtml(measurement: Measurement, path: string): string
@@ -26,8 +26,8 @@ createApp(dataDir: string | null = null): { store, handle(req, res), listen(port
 ## Example
 
 ```ts
-import { exportHtml } from "signal-sdk/visualization";
-import { DashboardStore, createApp } from "signal-sdk/dashboard";
+import { exportHtml } from "@felofix/signal-sdk/visualization";
+import { DashboardStore, createApp } from "@felofix/signal-sdk/dashboard";
 
 exportHtml(measurement, "outputs/traces.html");
 new DashboardStore("outputs/store").put(measurement);

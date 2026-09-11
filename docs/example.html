@@ -208,7 +208,7 @@ footer a { color: var(--ink-80); }
     <div class="split">
       <pre class="code"><code><span class="c">// the book: any JSON input, a written label rule, a ground state</span>
 <span class="k">import</span> { Function, FunctionImplementation, MeasurementConfig, Scenario,
-         datasetDistribution, measure } <span class="k">from</span> <span class="s">"signal-sdk"</span>;
+         datasetDistribution, measure } <span class="k">from</span> <span class="s">"@felofix/signal-sdk"</span>;
 
 <span class="k">const</span> book = [
   <span class="k">new</span> Scenario({ id: <span class="s">"sum-0000"</span>, input: { task: <span class="s">"What is 5 + 17?"</span> }, label: <span class="s">"easy"</span>,
@@ -228,7 +228,7 @@ footer a { color: var(--ink-80); }
   <span class="k">return</span> Number(a) + Number(b);
 }
 <span class="k">const</span> fn = <span class="k">new</span> Function({ name: <span class="s">"add"</span>,
-  implementation: { module: <span class="s">"signal-sdk/examples"</span>, callable: <span class="s">"add"</span>, revision: <span class="s">"1"</span> } });
+  implementation: { module: <span class="s">"@felofix/signal-sdk/examples"</span>, callable: <span class="s">"add"</span>, revision: <span class="s">"1"</span> } });
 
 <span class="c">// the measurement: 3 repetitions, two trivial controls added for you</span>
 <span class="k">const</span> measurement = <span class="k">await</span> measure([<span class="k">new</span> FunctionImplementation(fn, add, <span class="s">"simulation"</span>)],

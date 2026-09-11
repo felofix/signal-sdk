@@ -9,9 +9,9 @@ Exploratory comparisons come free with every experiment. A comparison that decid
 ## Example
 
 ```ts
-import { ComparisonPlan, ConfirmatoryComparison, MeasurementConfig, measure } from "signal-sdk";
-import { compareMeasurements } from "signal-sdk/certificate";
-import { detectableDifference, sampleSize } from "signal-sdk/statistics";
+import { ComparisonPlan, ConfirmatoryComparison, MeasurementConfig, measure } from "@felofix/signal-sdk";
+import { compareMeasurements } from "@felofix/signal-sdk/certificate";
+import { detectableDifference, sampleSize } from "@felofix/signal-sdk/statistics";
 
 // Plan the book before running.
 console.log(sampleSize(1000, 2, { clusterSize: 10, icc: 0.2, comparisons: 2 }));

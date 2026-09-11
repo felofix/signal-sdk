@@ -6,7 +6,7 @@ summary: certificates(), markdown(), exportCertificates(), compareMeasurements()
 ---
 
 ```ts
-import { RiskCertificate, certificates, compareMeasurements, exportCertificates, limitations, markdown } from "signal-sdk/certificate";
+import { RiskCertificate, certificates, compareMeasurements, exportCertificates, limitations, markdown } from "@felofix/signal-sdk/certificate";
 
 certificates(measurement: Measurement): RiskCertificate[]
 markdown(certificate: RiskCertificate): string
@@ -19,7 +19,7 @@ limitations(measurement: Measurement, functionId: string): string[]
 
 ```ts
 import { writeFileSync } from "node:fs";
-import { certificates, markdown } from "signal-sdk/certificate";
+import { certificates, markdown } from "@felofix/signal-sdk/certificate";
 
 for (const report of certificates(measurement)) {
   console.log(report.functionId.slice(0, 12), report.status);

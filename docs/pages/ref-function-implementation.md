@@ -5,7 +5,7 @@ summary: A Function identity paired with the callable that runs it.
 ---
 
 ```ts
-import { FunctionImplementation, type TrialContext } from "signal-sdk";
+import { FunctionImplementation, type TrialContext } from "@felofix/signal-sdk";
 
 new FunctionImplementation<Tools>(
   definition: Function,

@@ -5,7 +5,7 @@ summary: Grades, OutcomeGrade, MechanismGrade, ProcessGrade, Outcome, Action, Tr
 ---
 
 ```ts
-import { Action, Grades, MechanismGrade, Message, Outcome, OutcomeGrade, ProcessGrade, Step, Transcript, Trial } from "signal-sdk";
+import { Action, Grades, MechanismGrade, Message, Outcome, OutcomeGrade, ProcessGrade, Step, Transcript, Trial } from "@felofix/signal-sdk";
 
 new Grades({ outcome: OutcomeGrade; mechanism?: MechanismGrade; consequences?: Record<string, boolean>; process: ProcessGrade;
              metrics?: Record<string, number>; ratings?: JsonObject })

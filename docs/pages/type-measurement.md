@@ -5,7 +5,7 @@ summary: Measurement, MeasurementConfig, ConfirmatoryComparison, ComparisonPlan,
 ---
 
 ```ts
-import { ComparisonPlan, ConfirmatoryComparison, Measurement, MeasurementConfig, ValidityPeriod } from "signal-sdk";
+import { ComparisonPlan, ConfirmatoryComparison, Measurement, MeasurementConfig, ValidityPeriod } from "@felofix/signal-sdk";
 
 new MeasurementConfig({
   repetitions?: number;                 // 3, at least 2

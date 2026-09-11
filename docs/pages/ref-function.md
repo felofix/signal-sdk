@@ -5,7 +5,7 @@ summary: The identity of the system under test.
 ---
 
 ```ts
-import { Function, ModelIdentity } from "signal-sdk";
+import { Function, ModelIdentity } from "@felofix/signal-sdk";
 
 new Function({
   implementation: Record<string, Json>;             // required, non-empty
